@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { requireOwnerUser } from '@/lib/auth/dal';
 import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/service';
 import { categorizeTransaction, getUncategorizedCategoryId, loadActiveRules } from '@/lib/categorization/engine';
 
 const AddCategorySchema = z.object({
@@ -45,15 +46,21 @@ export interface CategoryActionState {
 }
 
 export async function updateCategory(categoryId: string, name: string): Promise<CategoryActionState> {
-  const user = await requireOwnerUser();
+  await requireOwnerUser();
   const trimmed = name.trim();
   if (!trimmed || trimmed.length > 60) {
     return { error: 'Name must be 1-60 characters.' };
   }
 
   const supabase = await createClient();
-  // RLS also scopes this to user_id = auth.uid(), so it's a no-op against system categories.
-  const { error } = await supabase.from('categories').update({ name: trimmed }).eq('id', categoryId).eq('user_id', user.id);
+  const { data: category } = await supabase.from('categories').select('user_id').eq('id', categoryId).maybeSingle();
+  if (!category) return { error: 'Category not found.' };
+
+  // System categories (user_id null) are read-only under RLS, so use the service-role
+  // client for those - safe here since requireOwnerUser() already gated this call to
+  // the single allowed owner.
+  const client = category.user_id ? supabase : createServiceClient();
+  const { error } = await client.from('categories').update({ name: trimmed }).eq('id', categoryId);
   if (error) return { error: error.message };
 
   revalidatePath('/categories');
@@ -63,10 +70,13 @@ export async function updateCategory(categoryId: string, name: string): Promise<
 }
 
 export async function deleteCategory(categoryId: string): Promise<CategoryActionState> {
-  const user = await requireOwnerUser();
+  await requireOwnerUser();
   const supabase = await createClient();
+  const { data: category } = await supabase.from('categories').select('user_id').eq('id', categoryId).maybeSingle();
+  if (!category) return { error: 'Category not found.' };
 
-  const { error } = await supabase.from('categories').delete().eq('id', categoryId).eq('user_id', user.id);
+  const client = category.user_id ? supabase : createServiceClient();
+  const { error } = await client.from('categories').delete().eq('id', categoryId);
   if (error) {
     // Postgres FK violation - category is still referenced by a rule or transaction.
     if (error.code === '23503') {

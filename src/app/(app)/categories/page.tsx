@@ -48,10 +48,7 @@ export default async function CategoriesPage() {
 
       <Card className="flex flex-col gap-3 p-4">
         <h2 className="font-medium">Categories</h2>
-        <p className="text-xs text-muted-foreground">
-          Click a custom category to rename or delete it. System categories are shared defaults and can&apos;t be
-          edited.
-        </p>
+        <p className="text-xs text-muted-foreground">Click a category to rename or delete it.</p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <p className="mb-1 text-sm text-muted-foreground">Income</p>

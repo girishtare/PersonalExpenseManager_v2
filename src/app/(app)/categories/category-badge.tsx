@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { Pencil } from 'lucide-react';
-import { Badge, badgeVariants } from '@/components/ui/badge';
+import { badgeVariants } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -20,11 +20,6 @@ export function CategoryBadge({ category }: { category: Category }) {
   const [name, setName] = useState(category.name);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-
-  // System categories are shared defaults, not owned by anyone - not editable/deletable.
-  if (!category.user_id) {
-    return <Badge variant="secondary">{category.name}</Badge>;
-  }
 
   return (
     <Popover
