@@ -17,7 +17,7 @@ export default async function CategoriesPage() {
       .select('id, name, type, user_id')
       .or(`user_id.eq.${user.id},user_id.is.null`)
       .order('type', { ascending: true })
-      .order('sort_order', { ascending: true }),
+      .order('name', { ascending: true }),
     supabase
       .from('categorization_rules')
       .select('id, category_id, pattern, match_type, direction, priority, user_id')

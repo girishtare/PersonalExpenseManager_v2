@@ -18,7 +18,7 @@ export default async function TransactionsPage() {
       .from('categories')
       .select('id, name, type')
       .or(`user_id.eq.${user.id},user_id.is.null`)
-      .order('sort_order', { ascending: true }),
+      .order('name', { ascending: true }),
     supabase.from('accounts').select('id, display_name').eq('user_id', user.id).order('created_at', { ascending: true }),
   ]);
 
