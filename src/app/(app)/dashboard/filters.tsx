@@ -1,34 +1,12 @@
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { DateRange } from 'react-day-picker';
-import { CalendarIcon } from 'lucide-react';
-import { buttonVariants } from '@/components/ui/button';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { cn } from '@/lib/utils';
+import { DateRangePicker } from '@/components/date-range-picker';
 
 interface Account {
   id: string;
   display_name: string;
-}
-
-function toDateKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function parseDateKey(key: string): Date {
-  const [year, month, day] = key.split('-').map(Number);
-  return new Date(year, month - 1, day);
-}
-
-function formatDisplay(date: Date): string {
-  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 export function DashboardFilters({
@@ -43,13 +21,6 @@ export function DashboardFilters({
   accountId: string;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const committedRange: DateRange = { from: parseDateKey(start), to: parseDateKey(end) };
-  // Tracks the in-progress selection locally while the popover is open - only navigates (via
-  // update()) once a full range is picked. Committing on every partial click would trigger a
-  // full page re-render mid-selection, wiping out the calendar's own from/to tracking before
-  // the user can pick the second date.
-  const [pendingRange, setPendingRange] = useState<DateRange>(committedRange);
 
   function update(next: Partial<{ start: string; end: string; accountId: string }>) {
     const params = new URLSearchParams({
@@ -65,33 +36,7 @@ export function DashboardFilters({
     <div className="flex flex-wrap items-end gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm">
       <div className="flex flex-col gap-1.5">
         <span className="text-xs text-muted-foreground">Date range</span>
-        <Popover
-          open={open}
-          onOpenChange={(next) => {
-            setOpen(next);
-            if (next) setPendingRange(committedRange); // reset to the committed range each time it opens
-          }}
-        >
-          <PopoverTrigger className={cn(buttonVariants({ variant: 'outline' }), 'h-9 justify-start gap-2 font-normal')}>
-            <CalendarIcon className="h-4 w-4" />
-            {formatDisplay(committedRange.from!)} &ndash; {formatDisplay(committedRange.to!)}
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-2" align="start">
-            <Calendar
-              mode="range"
-              defaultMonth={pendingRange.from}
-              selected={pendingRange}
-              onSelect={(newRange) => {
-                setPendingRange(newRange ?? { from: undefined, to: undefined });
-                if (newRange?.from && newRange?.to) {
-                  update({ start: toDateKey(newRange.from), end: toDateKey(newRange.to) });
-                  setOpen(false);
-                }
-              }}
-              numberOfMonths={2}
-            />
-          </PopoverContent>
-        </Popover>
+        <DateRangePicker start={start} end={end} onChange={(s, e) => update({ start: s, end: e })} />
       </div>
       <div className="flex flex-col gap-1.5">
         <span className="text-xs text-muted-foreground">Account</span>
