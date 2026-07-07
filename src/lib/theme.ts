@@ -13,6 +13,10 @@ export function getCurrentTheme(): Theme {
 
 export function applyTheme(theme: Theme) {
   document.documentElement.classList.toggle('dark', theme === 'dark');
+  // Belt-and-suspenders alongside the :root/:root.dark CSS rule: setting this as an inline
+  // style guarantees native controls (select popups, date pickers) pick it up regardless of
+  // any cascade/specificity surprise with the class-based rule.
+  document.documentElement.style.colorScheme = theme;
   window.localStorage.setItem(STORAGE_KEY, theme);
   window.dispatchEvent(new Event(THEME_CHANGE_EVENT));
 }
@@ -33,6 +37,7 @@ export const themeInitScript = `
       ? stored
       : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
     document.documentElement.classList.toggle('dark', theme === 'dark');
+    document.documentElement.style.colorScheme = theme;
   } catch (e) {}
 })();
 `;
