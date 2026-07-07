@@ -10,6 +10,15 @@ function monthLabel(date: Date): string {
   return date.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
 }
 
+// Deliberately local-calendar-date formatting, not toISOString() (which converts to UTC and
+// would roll a local month-start back a day for any timezone ahead of UTC, e.g. IST).
+function toDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export default async function DashboardPage() {
   const user = await requireOwnerUser();
   const supabase = await createClient();
@@ -22,11 +31,11 @@ export default async function DashboardPage() {
     supabase
       .from('v_category_totals')
       .select('category_name, category_type, total_amount')
-      .eq('month', currentMonthStart.toISOString().slice(0, 10)),
+      .eq('month', toDateKey(currentMonthStart)),
     supabase
       .from('v_monthly_totals')
       .select('month, direction, total_amount')
-      .gte('month', twelveMonthsAgo.toISOString().slice(0, 10)),
+      .gte('month', toDateKey(twelveMonthsAgo)),
   ]);
 
   const incomeCategories: CategoryAmount[] = (categoryTotals ?? [])
@@ -43,7 +52,7 @@ export default async function DashboardPage() {
   // All 12 month buckets, including ones with no activity, for a continuous trend line.
   const monthBuckets = Array.from({ length: 12 }, (_, i) => {
     const date = new Date(twelveMonthsAgo.getFullYear(), twelveMonthsAgo.getMonth() + i, 1);
-    return { key: date.toISOString().slice(0, 10), label: monthLabel(date) };
+    return { key: toDateKey(date), label: monthLabel(date) };
   });
 
   const trendData: MonthlyTrendPoint[] = monthBuckets.map((bucket) => {
