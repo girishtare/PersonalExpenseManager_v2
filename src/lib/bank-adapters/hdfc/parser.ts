@@ -79,14 +79,23 @@ async function parseExcel(fileContent: Buffer): Promise<ParsedStatement> {
   };
 }
 
-/** Matches a line like "15/03/24  AMAZON PAY INDIA PVT LTD  1,234.56 Cr" */
-const CC_LINE_RE = /^(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s+(.+?)\s+([\d,]+\.\d{2})\s*(CR)?\s*$/i;
+// Matches rows like:
+//   "15/03/2026| 17:45 AMAZON PAY INDIA PVT LTD + 990 C 1,234.56 l"
+//   "16/05/2026| 00:00 C 76.32 l"                          (no merchant text on some rows)
+//   "18/03/2026| 12:10 REFUND FROM MERCHANT Cr 500.00"
+// - date is immediately followed by "|" with no space, then an optional HH:MM timestamp.
+// - "+ <n>" is a reward-points readout, not part of the amount - ignored.
+// - a lone "C" before the amount is an unrelated template artifact, not a Cr/Dr marker -
+//   only the full "Cr"/"CR" token means credit; a lone "C" is dropped and defaults to debit.
+// - a trailing stray glyph (icon rendered as text, e.g. "l") after the amount is ignored.
+const CC_LINE_RE =
+  /^(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\|?\s*(?:\d{1,2}:\d{2}\s+)?(.*?)\s*(?:\+\s*\d+\s*)?(Cr|CR|C)?\s*([\d,]+\.\d{2})\s*\S{0,2}$/;
 const LEADING_DATE_RE = /^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}/;
 
 function parseHdfcCcLine(line: string): RawParsedTransaction | null {
   const m = line.match(CC_LINE_RE);
   if (!m) return null;
-  const [, dateStr, description, amountStr, crMarker] = m;
+  const [, dateStr, description, marker, amountStr] = m;
   const txnDate = normalizeSlashDate(dateStr);
   const amount = parseAmount(amountStr);
   if (!txnDate || !amount) return null;
@@ -94,7 +103,7 @@ function parseHdfcCcLine(line: string): RawParsedTransaction | null {
     txnDate,
     descriptionRaw: description.trim(),
     amount,
-    direction: crMarker ? 'credit' : 'debit',
+    direction: marker?.toLowerCase() === 'cr' ? 'credit' : 'debit',
   };
 }
 
@@ -106,6 +115,14 @@ function parseHdfcCcLine(line: string): RawParsedTransaction | null {
  * works perfectly on the first real file.
  */
 async function parsePDF(fileContent: Buffer, password: string | undefined): Promise<ParsedStatement> {
+  // pdfjs-dist's glyph/path code calls the browser's DOMMatrix API even during plain text
+  // extraction (no rendering involved). Node has no DOMMatrix, so without this polyfill
+  // parsing throws "DOMMatrix is not defined" on PDFs with embedded/Type3 fonts.
+  if (!('DOMMatrix' in globalThis)) {
+    const { default: DOMMatrixPolyfill } = await import('@thednp/dommatrix');
+    (globalThis as Record<string, unknown>).DOMMatrix = DOMMatrixPolyfill;
+  }
+
   const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
 
   let doc;
