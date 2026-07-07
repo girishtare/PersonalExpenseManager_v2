@@ -31,6 +31,7 @@ export function RuleCategoryPicker({
 
   return (
     <Select
+      items={categories.map((c) => ({ value: c.id, label: c.name }))}
       defaultValue={categoryId}
       disabled={isPending}
       onValueChange={(newCategoryId) => {

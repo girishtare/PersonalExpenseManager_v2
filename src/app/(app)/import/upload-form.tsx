@@ -60,7 +60,12 @@ export function UploadForm({ accounts }: { accounts: Account[] }) {
       <Card className="flex max-w-sm flex-col gap-3 p-4">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="accountId">Account</Label>
-          <Select name="accountId" defaultValue={accounts[0]?.id} required>
+          <Select
+            name="accountId"
+            items={accounts.map((account) => ({ value: account.id, label: account.display_name }))}
+            defaultValue={accounts[0]?.id}
+            required
+          >
             <SelectTrigger id="accountId" className="w-full">
               <SelectValue />
             </SelectTrigger>

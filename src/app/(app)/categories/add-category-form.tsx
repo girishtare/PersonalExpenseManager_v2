@@ -20,7 +20,7 @@ export function AddCategoryForm() {
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="category-type">Type</Label>
-        <Select name="type" defaultValue="expense">
+        <Select name="type" items={{ income: 'Income', expense: 'Expense' }} defaultValue="expense">
           <SelectTrigger id="category-type" className="w-36">
             <SelectValue />
           </SelectTrigger>

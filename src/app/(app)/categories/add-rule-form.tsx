@@ -34,7 +34,11 @@ export function AddRuleForm({ categories }: { categories: Category[] }) {
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="matchType">Match type</Label>
-        <Select name="matchType" defaultValue="contains">
+        <Select
+          name="matchType"
+          items={{ contains: 'Contains', starts_with: 'Starts with', exact: 'Exact', regex: 'Regex' }}
+          defaultValue="contains"
+        >
           <SelectTrigger id="matchType" className="w-36">
             <SelectValue />
           </SelectTrigger>
@@ -48,7 +52,7 @@ export function AddRuleForm({ categories }: { categories: Category[] }) {
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="direction">Direction</Label>
-        <Select name="direction" defaultValue="any">
+        <Select name="direction" items={{ any: 'Any', debit: 'Debit', credit: 'Credit' }} defaultValue="any">
           <SelectTrigger id="direction" className="w-28">
             <SelectValue />
           </SelectTrigger>
@@ -61,7 +65,7 @@ export function AddRuleForm({ categories }: { categories: Category[] }) {
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="categoryId">Category</Label>
-        <Select name="categoryId" required>
+        <Select name="categoryId" items={categories.map((c) => ({ value: c.id, label: c.name }))} required>
           <SelectTrigger id="categoryId" className="w-44">
             <SelectValue placeholder="Choose a category" />
           </SelectTrigger>

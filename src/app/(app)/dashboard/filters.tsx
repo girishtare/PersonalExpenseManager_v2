@@ -83,6 +83,7 @@ export function DashboardFilters({
       <div className="flex flex-col gap-1.5">
         <span className="text-xs text-muted-foreground">Account</span>
         <Select
+          items={[{ value: 'all', label: 'All accounts' }, ...accounts.map((a) => ({ value: a.id, label: a.display_name }))]}
           value={accountId || 'all'}
           onValueChange={(value) => update({ accountId: !value || value === 'all' ? '' : value })}
         >

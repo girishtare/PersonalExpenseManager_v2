@@ -31,7 +31,7 @@ export function AddAccountForm({ account }: { account?: Account }) {
 
         <div className="flex flex-col gap-1.5">
           <Label>Bank</Label>
-          <Select defaultValue="HDFC" disabled>
+          <Select items={{ HDFC: 'HDFC Bank' }} defaultValue="HDFC" disabled>
             <SelectTrigger className="w-full">
               <SelectValue />
             </SelectTrigger>
@@ -44,7 +44,12 @@ export function AddAccountForm({ account }: { account?: Account }) {
 
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="accountType">Account type</Label>
-          <Select name="accountType" defaultValue={account?.account_type ?? 'savings'} required>
+          <Select
+            name="accountType"
+            items={{ savings: 'Savings', current: 'Current', credit_card: 'Credit Card' }}
+            defaultValue={account?.account_type ?? 'savings'}
+            required
+          >
             <SelectTrigger id="accountType" className="w-full">
               <SelectValue />
             </SelectTrigger>
