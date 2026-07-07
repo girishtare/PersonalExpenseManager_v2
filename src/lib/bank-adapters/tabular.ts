@@ -34,7 +34,14 @@ const HEADER_ALIASES = {
   refNo: [/chq/i, /ref/i],
   balance: [/closing balance/i, /^balance/i],
   amount: [/^amount/i, /^amt/i],
-  crDrType: [/^type$/i, /cr\s*\/?\s*dr/i, /dr\s*\/?\s*cr/i, /transaction type/i],
+  // Deliberately does NOT include a generic /transaction type/i - real HDFC credit card
+  // exports have an (unrelated) "Transaction type" column for Domestic/International, which
+  // would collide with this one and get picked first since it appears earlier in the row.
+  crDrType: [/^type$/i, /cr\s*\/?\s*dr/i, /dr\s*\/?\s*cr/i, /debit\s*\/?\s*credit/i],
+  // Credit card exports often label this "Date & Time" (date and time combined in one cell) -
+  // broader than the strict `date` alias above, which the savings/current parser relies on
+  // staying exact.
+  ccDate: [/^date/i],
 };
 
 function findColumn(headerRow: string[], aliases: RegExp[]): number {
@@ -120,19 +127,23 @@ export function buildParsedStatementFromRows(rows: string[][]): ParsedStatement 
 // this statement type - a lone "C" is not a credit marker there either).
 const AMOUNT_WITH_MARKER_RE = /^([\d,]+\.\d{2})\s*(Cr|CR|C)?$/;
 
+// Real HDFC credit card exports combine date and time in one cell, e.g. "16/12/2025 / 00:00" -
+// pull out just the leading date portion before handing it to isLikelyDate/normalizeSlashDate.
+function extractLeadingDate(raw: string | undefined): string | undefined {
+  return raw?.trim().match(/^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}/)?.[0];
+}
+
 /**
  * HDFC credit card statements (Excel/CSV export) use a single Amount column rather than the
- * separate debit/credit columns a savings/current NetBanking export has - credits (payments,
- * refunds) are marked either by a dedicated Type/Cr-Dr column, or by a trailing "Cr" suffix
- * directly on the amount cell. Unlike the savings/current parser above, this hasn't been
- * verified against a real credit card export yet - the row shape is a best-effort guess from
- * the known PDF format for the same statement type, so expect this to need tuning once tried
- * against a real file (parse warnings below should surface anything it can't handle).
+ * separate debit/credit columns a savings/current NetBanking export has, a combined
+ * "Date & Time" column, and a "Debit / Credit" column marking credits (payments, refunds) -
+ * confirmed against a real exported statement (legacy binary .xls, HTML-disguised exports are
+ * handled the same way once sniffed - see parseExcel).
  */
 export function buildCreditCardStatementFromRows(rows: string[][]): ParsedStatement {
   const headerIdx = rows.findIndex(
     (row) =>
-      findColumn(row, HEADER_ALIASES.date) !== -1 &&
+      findColumn(row, HEADER_ALIASES.ccDate) !== -1 &&
       findColumn(row, HEADER_ALIASES.narration) !== -1 &&
       findColumn(row, HEADER_ALIASES.amount) !== -1
   );
@@ -151,7 +162,7 @@ export function buildCreditCardStatementFromRows(rows: string[][]): ParsedStatem
 
   const header = rows[headerIdx];
   const col = {
-    date: findColumn(header, HEADER_ALIASES.date),
+    date: findColumn(header, HEADER_ALIASES.ccDate),
     narration: findColumn(header, HEADER_ALIASES.narration),
     amount: findColumn(header, HEADER_ALIASES.amount),
     crDrType: findColumn(header, HEADER_ALIASES.crDrType),
@@ -163,8 +174,8 @@ export function buildCreditCardStatementFromRows(rows: string[][]): ParsedStatem
 
   for (let i = headerIdx + 1; i < rows.length; i++) {
     const row = rows[i];
-    const rawDate = col.date !== -1 ? row[col.date] : undefined;
-    if (!isLikelyDate(rawDate)) continue; // footer/summary row (e.g. "Total due...") - stop silently
+    const rawDate = extractLeadingDate(col.date !== -1 ? row[col.date] : undefined);
+    if (!isLikelyDate(rawDate)) continue; // footer/summary row (e.g. reward points, GST, loan summaries) - skip
 
     const rawAmountCell = (col.amount !== -1 ? row[col.amount] : undefined)?.trim() ?? '';
     const amountMatch = rawAmountCell.match(AMOUNT_WITH_MARKER_RE);
