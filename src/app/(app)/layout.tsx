@@ -3,6 +3,8 @@ import Link from 'next/link';
 const NAV_LINKS = [
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/accounts', label: 'Accounts' },
+  { href: '/import', label: 'Import' },
+  { href: '/transactions', label: 'Transactions' },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
