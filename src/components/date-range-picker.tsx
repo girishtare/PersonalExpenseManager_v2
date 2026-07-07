@@ -73,29 +73,35 @@ export function DateRangePicker({
             mode="range"
             defaultMonth={pendingRange.from ?? new Date()}
             selected={pendingRange}
-            onSelect={(newRange) => {
-              // react-day-picker collapses a click into a same-day {from, to} range when the
-              // selection started empty (addToRange's empty-range branch), which would let a
-              // single click satisfy "both ends set" and commit/close before a second date is
-              // ever picked. Only accept that as a real 1-day range when `from` was already
-              // pending (i.e. this really is the second click, on the same day as the first).
-              const startedEmpty = !pendingRange.from && !pendingRange.to;
-              const collapsedFirstClick =
-                startedEmpty && newRange?.from && newRange?.to && newRange.from.getTime() === newRange.to.getTime();
-
-              if (collapsedFirstClick) {
-                setPendingRange({ from: newRange.from, to: undefined });
-                return;
-              }
-
-              setPendingRange(newRange ?? { from: undefined, to: undefined });
-              if (newRange?.from && newRange?.to) {
-                onChange(toDateKey(newRange.from), toDateKey(newRange.to));
-                setOpen(false);
-              }
-            }}
+            onSelect={(newRange) => setPendingRange(newRange ?? { from: undefined, to: undefined })}
             numberOfMonths={2}
           />
+          <div className="flex items-center justify-end gap-2 border-t border-border pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setPendingRange(committedRange);
+                setOpen(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={!pendingRange.from || !pendingRange.to}
+              onClick={() => {
+                if (pendingRange.from && pendingRange.to) {
+                  onChange(toDateKey(pendingRange.from), toDateKey(pendingRange.to));
+                  setOpen(false);
+                }
+              }}
+            >
+              Ok
+            </Button>
+          </div>
         </PopoverContent>
       </Popover>
       {onClear && committedRange.from && (
