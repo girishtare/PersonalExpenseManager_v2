@@ -1,5 +1,6 @@
 import Papa from 'papaparse';
 import ExcelJS from 'exceljs';
+import * as XLSX from 'xlsx';
 import * as cheerio from 'cheerio';
 import type { BankStatementParser, ParsedStatement, RawParsedTransaction } from '../types';
 import { buildParsedStatementFromRows, normalizeSlashDate, parseAmount } from '../tabular';
@@ -31,6 +32,20 @@ async function parseRealXlsx(fileContent: Buffer): Promise<ParsedStatement> {
   return buildParsedStatementFromRows(rows);
 }
 
+/**
+ * Legacy binary .xls (BIFF8). ExcelJS doesn't read this format at all, so we fall back to
+ * SheetJS here specifically - installed from SheetJS's own CDN (not the npm registry, which
+ * is frozen on a version with known unpatched prototype-pollution/ReDoS advisories; the CDN
+ * build carries the fixes). Scoped to only this legacy-binary path so the rest of the import
+ * pipeline doesn't depend on it.
+ */
+function parseLegacyXls(fileContent: Buffer): ParsedStatement {
+  const workbook = XLSX.read(fileContent, { type: 'buffer' });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows: string[][] = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, raw: false, defval: '' });
+  return buildParsedStatementFromRows(rows);
+}
+
 function parseHtmlTableStatement(html: string): ParsedStatement {
   const $ = cheerio.load(html);
   const rows: string[][] = [];
@@ -57,15 +72,7 @@ async function parseExcel(fileContent: Buffer): Promise<ParsedStatement> {
     return parseRealXlsx(fileContent);
   }
   if (isOleMagic(fileContent)) {
-    return {
-      periodStart: null,
-      periodEnd: null,
-      transactions: [],
-      warnings: [
-        'This looks like a legacy binary .xls file, which phase 1 does not parse. ' +
-          'Please re-export the statement as CSV from HDFC NetBanking, or open it in Excel and save as .xlsx.',
-      ],
-    };
+    return parseLegacyXls(fileContent);
   }
   const text = fileContent.toString('utf-8');
   if (/<html|<table/i.test(text.slice(0, 2000))) {
