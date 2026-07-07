@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { LogOut } from 'lucide-react';
 import { requireOwnerUser } from '@/lib/auth/dal';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { signOut } from './actions';
 
 const NAV_LINKS = [
@@ -27,13 +28,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             ))}
           </div>
         </div>
-        <form action={signOut} className="flex items-center gap-3 text-sm text-zinc-600 dark:text-zinc-400">
-          <span className="hidden sm:inline">{user.email}</span>
-          <button type="submit" className="flex items-center gap-1 hover:text-zinc-900 dark:hover:text-zinc-100">
-            <LogOut className="h-4 w-4" />
-            Sign out
-          </button>
-        </form>
+        <div className="flex items-center gap-4">
+          <ThemeToggle />
+          <form action={signOut} className="flex items-center gap-3 text-sm text-zinc-600 dark:text-zinc-400">
+            <span className="hidden sm:inline">{user.email}</span>
+            <button type="submit" className="flex items-center gap-1 hover:text-zinc-900 dark:hover:text-zinc-100">
+              <LogOut className="h-4 w-4" />
+              Sign out
+            </button>
+          </form>
+        </div>
       </nav>
       {children}
     </div>
