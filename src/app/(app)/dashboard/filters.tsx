@@ -44,7 +44,12 @@ export function DashboardFilters({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const range: DateRange = { from: parseDateKey(start), to: parseDateKey(end) };
+  const committedRange: DateRange = { from: parseDateKey(start), to: parseDateKey(end) };
+  // Tracks the in-progress selection locally while the popover is open - only navigates (via
+  // update()) once a full range is picked. Committing on every partial click would trigger a
+  // full page re-render mid-selection, wiping out the calendar's own from/to tracking before
+  // the user can pick the second date.
+  const [pendingRange, setPendingRange] = useState<DateRange>(committedRange);
 
   function update(next: Partial<{ start: string; end: string; accountId: string }>) {
     const params = new URLSearchParams({
@@ -60,20 +65,28 @@ export function DashboardFilters({
     <div className="flex flex-wrap items-end gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm">
       <div className="flex flex-col gap-1.5">
         <span className="text-xs text-muted-foreground">Date range</span>
-        <Popover open={open} onOpenChange={setOpen}>
+        <Popover
+          open={open}
+          onOpenChange={(next) => {
+            setOpen(next);
+            if (next) setPendingRange(committedRange); // reset to the committed range each time it opens
+          }}
+        >
           <PopoverTrigger className={cn(buttonVariants({ variant: 'outline' }), 'h-9 justify-start gap-2 font-normal')}>
             <CalendarIcon className="h-4 w-4" />
-            {formatDisplay(range.from!)} &ndash; {formatDisplay(range.to!)}
+            {formatDisplay(committedRange.from!)} &ndash; {formatDisplay(committedRange.to!)}
           </PopoverTrigger>
           <PopoverContent className="w-auto p-2" align="start">
             <Calendar
               mode="range"
-              defaultMonth={range.from}
-              selected={range}
+              defaultMonth={pendingRange.from}
+              selected={pendingRange}
               onSelect={(newRange) => {
-                if (newRange?.from) update({ start: toDateKey(newRange.from) });
-                if (newRange?.to) update({ end: toDateKey(newRange.to) });
-                if (newRange?.from && newRange?.to) setOpen(false);
+                setPendingRange(newRange ?? { from: undefined, to: undefined });
+                if (newRange?.from && newRange?.to) {
+                  update({ start: toDateKey(newRange.from), end: toDateKey(newRange.to) });
+                  setOpen(false);
+                }
               }}
               numberOfMonths={2}
             />
