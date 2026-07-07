@@ -33,16 +33,18 @@ export interface SimilarTransaction {
 /**
  * Finds other transactions whose narration reduces to the same "core" text as the given
  * transaction's (see reduceDescription) - i.e. likely the same recurring merchant/counterparty -
- * excluding ones already tagged with its current category. Called right after a manual
- * re-categorization so the UI can offer to apply the same change to the rest of them.
+ * excluding ones already tagged with the category the user just picked. Called BEFORE the
+ * transaction is actually updated (a pure read, no revalidatePath), so the UI can show the
+ * "apply to similar?" dialog and only commit any writes once the user responds - committing
+ * first would trigger a page refresh that could race with (and drop) the dialog's pending state.
  */
-export async function findSimilarTransactions(transactionId: string): Promise<SimilarTransaction[]> {
+export async function findSimilarTransactions(transactionId: string, newCategoryId: string): Promise<SimilarTransaction[]> {
   const user = await requireOwnerUser();
   const supabase = await createClient();
 
   const { data: target } = await supabase
     .from('transactions')
-    .select('description_raw, direction, category_id')
+    .select('description_raw, direction')
     .eq('id', transactionId)
     .eq('user_id', user.id)
     .maybeSingle();
@@ -58,7 +60,7 @@ export async function findSimilarTransactions(transactionId: string): Promise<Si
     .eq('user_id', user.id)
     .eq('direction', target.direction)
     .neq('id', transactionId)
-    .neq('category_id', target.category_id)
+    .neq('category_id', newCategoryId)
     .order('txn_date', { ascending: false })
     .limit(2000);
 

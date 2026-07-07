@@ -44,6 +44,7 @@ export function CategoryPicker({
   const [value, setValue] = useState(categoryId);
   const [similar, setSimilar] = useState<SimilarTransaction[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [pendingCategoryId, setPendingCategoryId] = useState<string | null>(null);
   const [applying, startApplying] = useTransition();
 
   const categoryNameById = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories]);
@@ -52,11 +53,16 @@ export function CategoryPicker({
     if (!newCategoryId) return;
     setValue(newCategoryId);
     startTransition(async () => {
-      await updateTransactionCategory(transactionId, newCategoryId);
-      const matches = await findSimilarTransactions(transactionId);
+      // Look up matches before writing anything - committing first would revalidate the page
+      // and could tear down this row (e.g. if a category filter is active) before the dialog
+      // ever gets to show.
+      const matches = await findSimilarTransactions(transactionId, newCategoryId);
       if (matches.length > 0) {
         setSimilar(matches);
         setSelected(new Set(matches.map((m) => m.id)));
+        setPendingCategoryId(newCategoryId);
+      } else {
+        await updateTransactionCategory(transactionId, newCategoryId);
       }
     });
   }
@@ -64,6 +70,7 @@ export function CategoryPicker({
   function closeDialog() {
     setSimilar(null);
     setSelected(new Set());
+    setPendingCategoryId(null);
   }
 
   function toggleSelected(id: string) {
@@ -142,15 +149,27 @@ export function CategoryPicker({
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" disabled={applying} onClick={closeDialog}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={applying}
+              onClick={() =>
+                startApplying(async () => {
+                  if (pendingCategoryId) await updateTransactionCategory(transactionId, pendingCategoryId);
+                  closeDialog();
+                })
+              }
+            >
               Skip
             </Button>
             <Button
               type="button"
-              disabled={applying || selected.size === 0}
+              disabled={applying || selected.size === 0 || !pendingCategoryId}
               onClick={() =>
                 startApplying(async () => {
-                  await bulkUpdateTransactionCategory([...selected], value);
+                  if (pendingCategoryId) {
+                    await bulkUpdateTransactionCategory([transactionId, ...selected], pendingCategoryId);
+                  }
                   closeDialog();
                 })
               }
