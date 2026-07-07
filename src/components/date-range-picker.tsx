@@ -72,6 +72,20 @@ export function DateRangePicker({
             defaultMonth={pendingRange.from ?? new Date()}
             selected={pendingRange}
             onSelect={(newRange) => {
+              // react-day-picker collapses a click into a same-day {from, to} range when the
+              // selection started empty (addToRange's empty-range branch), which would let a
+              // single click satisfy "both ends set" and commit/close before a second date is
+              // ever picked. Only accept that as a real 1-day range when `from` was already
+              // pending (i.e. this really is the second click, on the same day as the first).
+              const startedEmpty = !pendingRange.from && !pendingRange.to;
+              const collapsedFirstClick =
+                startedEmpty && newRange?.from && newRange?.to && newRange.from.getTime() === newRange.to.getTime();
+
+              if (collapsedFirstClick) {
+                setPendingRange({ from: newRange.from, to: undefined });
+                return;
+              }
+
               setPendingRange(newRange ?? { from: undefined, to: undefined });
               if (newRange?.from && newRange?.to) {
                 onChange(toDateKey(newRange.from), toDateKey(newRange.to));
