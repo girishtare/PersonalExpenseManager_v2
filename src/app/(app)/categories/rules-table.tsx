@@ -110,10 +110,10 @@ export function RulesTable({ rules, categories }: { rules: Rule[]; categories: C
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div className="flex flex-col gap-1.5">
           <span className="text-xs text-muted-foreground">Search pattern</span>
-          <Input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-48" />
+          <Input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full" />
         </div>
         <div className="flex flex-col gap-1.5">
           <span className="text-xs text-muted-foreground">Category</span>
@@ -122,7 +122,7 @@ export function RulesTable({ rules, categories }: { rules: Rule[]; categories: C
             value={categoryFilter}
             onValueChange={(v) => v && setCategoryFilter(v)}
           >
-            <SelectTrigger className="w-48">
+            <SelectTrigger className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -142,7 +142,7 @@ export function RulesTable({ rules, categories }: { rules: Rule[]; categories: C
             value={directionFilter}
             onValueChange={(v) => v && setDirectionFilter(v)}
           >
-            <SelectTrigger className="w-28">
+            <SelectTrigger className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -160,7 +160,7 @@ export function RulesTable({ rules, categories }: { rules: Rule[]; categories: C
             value={sourceFilter}
             onValueChange={(v) => v && setSourceFilter(v)}
           >
-            <SelectTrigger className="w-28">
+            <SelectTrigger className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
