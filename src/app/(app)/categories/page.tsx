@@ -1,13 +1,11 @@
 import { requireOwnerUser } from '@/lib/auth/dal';
 import { createClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AddCategoryForm } from './add-category-form';
 import { AddRuleForm } from './add-rule-form';
 import { CategoryBadge } from './category-badge';
-import { DeleteRuleButton } from './delete-rule-button';
 import { RecalculateButton } from './recalculate-button';
-import { RuleCategoryPicker } from './rule-category-picker';
+import { RulesTable } from './rules-table';
 
 export default async function CategoriesPage() {
   const user = await requireOwnerUser();
@@ -80,34 +78,7 @@ export default async function CategoriesPage() {
           Changing the category on a system rule creates your own override at a higher priority rather than
           modifying the shared rule directly - the original stays in the list, but your version takes precedence.
         </p>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Priority</TableHead>
-              <TableHead>Pattern</TableHead>
-              <TableHead>Match</TableHead>
-              <TableHead>Direction</TableHead>
-              <TableHead>Category</TableHead>
-              <TableHead>Source</TableHead>
-              <TableHead></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {(rules ?? []).map((rule) => (
-              <TableRow key={rule.id}>
-                <TableCell>{rule.priority}</TableCell>
-                <TableCell className="font-mono text-xs">{rule.pattern}</TableCell>
-                <TableCell>{rule.match_type}</TableCell>
-                <TableCell>{rule.direction ?? 'any'}</TableCell>
-                <TableCell>
-                  <RuleCategoryPicker rule={rule} categories={categories ?? []} />
-                </TableCell>
-                <TableCell className="text-muted-foreground">{rule.user_id ? 'yours' : 'system'}</TableCell>
-                <TableCell>{rule.user_id && <DeleteRuleButton ruleId={rule.id} />}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <RulesTable rules={rules ?? []} categories={categories ?? []} />
       </Card>
     </main>
   );
