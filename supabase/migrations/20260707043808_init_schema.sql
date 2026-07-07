@@ -2,8 +2,6 @@
 -- Tables are owned per-user via auth.uid(); categories/categorization_rules also allow
 -- shared "system" rows (user_id is null) seeded in the next migration.
 
-create extension if not exists pgcrypto;
-
 create type account_type as enum ('savings', 'current', 'credit_card');
 create type source_format as enum ('pdf', 'csv', 'xlsx');
 create type parse_status as enum ('pending', 'processing', 'parsed', 'partially_parsed', 'failed');
@@ -105,18 +103,12 @@ create table transactions (
   categorization_rule_id uuid references categorization_rules(id) on delete set null,
   is_manual_override boolean not null default false,
   reference_no text,
-  -- Deterministic dedupe key so re-uploading a statement with overlapping dates is a no-op.
-  -- Must reference base columns only (generated columns can't reference other generated columns).
-  dedupe_hash text generated always as (
-    encode(
-      digest(
-        account_id::text || '|' || txn_date::text || '|' || amount::text || '|' ||
-        direction::text || '|' || lower(trim(description_raw)) || '|' || coalesce(reference_no, ''),
-        'sha256'
-      ),
-      'hex'
-    )
-  ) stored,
+  -- Deterministic dedupe key (sha256 of account_id|txn_date|amount|direction|description_normalized|
+  -- reference_no) so re-uploading a statement with overlapping dates is a no-op. Computed in
+  -- application code at insert time (see lib/transactions/dedupe.ts) rather than as a generated
+  -- column: pgcrypto's digest() is not marked IMMUTABLE on this Postgres build, which generated
+  -- columns require.
+  dedupe_hash text not null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (account_id, dedupe_hash)
