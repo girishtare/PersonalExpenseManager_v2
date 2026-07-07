@@ -28,6 +28,10 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      // The beforeInteractive theme-init script adds/removes the "dark" class on this
+      // element before hydration, which intentionally differs from the server-rendered
+      // markup - suppress the (expected) one-time mismatch warning for it.
+      suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
         <Script id="theme-init" strategy="beforeInteractive">

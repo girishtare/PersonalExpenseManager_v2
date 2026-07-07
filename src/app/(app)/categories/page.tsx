@@ -1,9 +1,11 @@
 import { requireOwnerUser } from '@/lib/auth/dal';
 import { createClient } from '@/lib/supabase/server';
+import { Card } from '@/components/ui/card';
 import { AddCategoryForm } from './add-category-form';
 import { AddRuleForm } from './add-rule-form';
 import { DeleteRuleButton } from './delete-rule-button';
 import { RecalculateButton } from './recalculate-button';
+import { RuleCategoryPicker } from './rule-category-picker';
 
 export default async function CategoriesPage() {
   const user = await requireOwnerUser();
@@ -18,7 +20,7 @@ export default async function CategoriesPage() {
       .order('sort_order', { ascending: true }),
     supabase
       .from('categorization_rules')
-      .select('id, pattern, match_type, direction, priority, user_id, categories(name)')
+      .select('id, category_id, pattern, match_type, direction, priority, user_id')
       .or(`user_id.eq.${user.id},user_id.is.null`)
       .order('priority', { ascending: true }),
   ]);
@@ -33,7 +35,18 @@ export default async function CategoriesPage() {
         <RecalculateButton />
       </div>
 
-      <section className="flex flex-col gap-3">
+      <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Card className="flex flex-col gap-3">
+          <h2 className="font-medium">Add category</h2>
+          <AddCategoryForm />
+        </Card>
+        <Card className="flex flex-col gap-3">
+          <h2 className="font-medium">Add rule</h2>
+          <AddRuleForm categories={categories ?? []} />
+        </Card>
+      </section>
+
+      <Card className="flex flex-col gap-3">
         <h2 className="font-medium">Categories</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
@@ -59,10 +72,9 @@ export default async function CategoriesPage() {
             </ul>
           </div>
         </div>
-        <AddCategoryForm />
-      </section>
+      </Card>
 
-      <section className="flex flex-col gap-3">
+      <Card className="flex flex-col gap-3">
         <h2 className="font-medium">Categorization rules</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -85,7 +97,11 @@ export default async function CategoriesPage() {
                   <td className="py-2 pr-4">{rule.match_type}</td>
                   <td className="py-2 pr-4">{rule.direction ?? 'any'}</td>
                   <td className="py-2 pr-4">
-                    {(rule.categories as unknown as { name: string }[] | null)?.[0]?.name}
+                    {rule.user_id ? (
+                      <RuleCategoryPicker ruleId={rule.id} categoryId={rule.category_id} categories={categories ?? []} />
+                    ) : (
+                      (categories ?? []).find((c) => c.id === rule.category_id)?.name
+                    )}
                   </td>
                   <td className="py-2 pr-4 text-zinc-600 dark:text-zinc-400">
                     {rule.user_id ? 'yours' : 'system'}
@@ -96,8 +112,7 @@ export default async function CategoriesPage() {
             </tbody>
           </table>
         </div>
-        <AddRuleForm categories={categories ?? []} />
-      </section>
+      </Card>
     </main>
   );
 }

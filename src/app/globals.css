@@ -8,11 +8,16 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* Without this, native controls (select popups, date pickers) ignore our .dark class and
+     render with the browser/OS default (usually light), making option text unreadable
+     against our dark background. */
+  color-scheme: light;
 }
 
 :root.dark {
   --background: #0a0a0a;
   --foreground: #ededed;
+  color-scheme: dark;
 }
 
 @theme inline {

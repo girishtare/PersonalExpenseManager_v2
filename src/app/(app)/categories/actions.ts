@@ -80,6 +80,14 @@ export async function createRule(_prevState: AddRuleState | undefined, formData:
   return {};
 }
 
+export async function updateRuleCategory(ruleId: string, categoryId: string) {
+  const user = await requireOwnerUser();
+  const supabase = await createClient();
+  // RLS also scopes updates to user_id = auth.uid(), so this is a no-op against system rules.
+  await supabase.from('categorization_rules').update({ category_id: categoryId }).eq('id', ruleId).eq('user_id', user.id);
+  revalidatePath('/categories');
+}
+
 export async function deleteRule(ruleId: string) {
   const user = await requireOwnerUser();
   const supabase = await createClient();
