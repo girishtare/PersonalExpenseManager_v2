@@ -4,6 +4,9 @@ import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { CategoryPicker } from './category-picker';
 
+const formatAmount = (value: number) =>
+  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(value);
+
 export default async function TransactionsPage() {
   const user = await requireOwnerUser();
   const supabase = await createClient();
@@ -44,9 +47,11 @@ export default async function TransactionsPage() {
                   <TableCell>{txn.txn_date}</TableCell>
                   <TableCell className="max-w-xs truncate whitespace-normal">{txn.description_raw}</TableCell>
                   <TableCell>{(txn.accounts as unknown as { display_name: string }[] | null)?.[0]?.display_name}</TableCell>
-                  <TableCell className={`text-right ${txn.direction === 'credit' ? 'text-emerald-600 dark:text-emerald-500' : ''}`}>
+                  <TableCell
+                    className={`text-right tabular-nums ${txn.direction === 'credit' ? 'text-emerald-600 dark:text-emerald-500' : ''}`}
+                  >
                     {txn.direction === 'credit' ? '+' : '-'}
-                    {txn.amount}
+                    {formatAmount(Number(txn.amount))}
                   </TableCell>
                   <TableCell>
                     <CategoryPicker transactionId={txn.id} categoryId={txn.category_id} categories={categories ?? []} />
