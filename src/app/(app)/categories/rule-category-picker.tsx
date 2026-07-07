@@ -18,26 +18,38 @@ interface Category {
   type: string;
 }
 
-export function RuleCategoryPicker({
-  ruleId,
-  categoryId,
-  categories,
-}: {
-  ruleId: string;
-  categoryId: string;
-  categories: Category[];
-}) {
+interface Rule {
+  id: string;
+  user_id: string | null;
+  pattern: string;
+  match_type: string;
+  direction: string | null;
+  priority: number;
+  category_id: string;
+}
+
+export function RuleCategoryPicker({ rule, categories }: { rule: Rule; categories: Category[] }) {
   const [isPending, startTransition] = useTransition();
 
   return (
     <Select
       items={categories.map((c) => ({ value: c.id, label: c.name }))}
-      defaultValue={categoryId}
+      defaultValue={rule.category_id}
       disabled={isPending}
       onValueChange={(newCategoryId) => {
         if (!newCategoryId) return;
         startTransition(() => {
-          updateRuleCategory(ruleId, newCategoryId);
+          updateRuleCategory(
+            {
+              id: rule.id,
+              userId: rule.user_id,
+              pattern: rule.pattern,
+              matchType: rule.match_type,
+              direction: rule.direction,
+              priority: rule.priority,
+            },
+            newCategoryId
+          );
         });
       }}
     >

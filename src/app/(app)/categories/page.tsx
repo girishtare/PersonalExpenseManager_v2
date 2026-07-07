@@ -78,6 +78,10 @@ export default async function CategoriesPage() {
 
       <Card className="flex flex-col gap-3 p-4">
         <h2 className="font-medium">Categorization rules</h2>
+        <p className="text-xs text-muted-foreground">
+          Changing the category on a system rule creates your own override at a higher priority rather than
+          modifying the shared rule directly - the original stays in the list, but your version takes precedence.
+        </p>
         <Table>
           <TableHeader>
             <TableRow>
@@ -98,11 +102,7 @@ export default async function CategoriesPage() {
                 <TableCell>{rule.match_type}</TableCell>
                 <TableCell>{rule.direction ?? 'any'}</TableCell>
                 <TableCell>
-                  {rule.user_id ? (
-                    <RuleCategoryPicker ruleId={rule.id} categoryId={rule.category_id} categories={categories ?? []} />
-                  ) : (
-                    (categories ?? []).find((c) => c.id === rule.category_id)?.name
-                  )}
+                  <RuleCategoryPicker rule={rule} categories={categories ?? []} />
                 </TableCell>
                 <TableCell className="text-muted-foreground">{rule.user_id ? 'yours' : 'system'}</TableCell>
                 <TableCell>{rule.user_id && <DeleteRuleButton ruleId={rule.id} />}</TableCell>

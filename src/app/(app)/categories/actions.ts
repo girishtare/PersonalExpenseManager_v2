@@ -80,11 +80,31 @@ export async function createRule(_prevState: AddRuleState | undefined, formData:
   return {};
 }
 
-export async function updateRuleCategory(ruleId: string, categoryId: string) {
+export async function updateRuleCategory(
+  rule: { id: string; userId: string | null; pattern: string; matchType: string; direction: string | null; priority: number },
+  categoryId: string
+) {
   const user = await requireOwnerUser();
   const supabase = await createClient();
-  // RLS also scopes updates to user_id = auth.uid(), so this is a no-op against system rules.
-  await supabase.from('categorization_rules').update({ category_id: categoryId }).eq('id', ruleId).eq('user_id', user.id);
+
+  if (rule.userId) {
+    // Your own rule - update it directly (RLS also scopes this to user_id = auth.uid()).
+    await supabase.from('categorization_rules').update({ category_id: categoryId }).eq('id', rule.id).eq('user_id', user.id);
+  } else {
+    // System rules are shared and read-only (RLS blocks writes to user_id-null rows), so
+    // "editing" one clones it as your own override at a higher priority instead - same
+    // pattern as the "always categorize like this" override from the transactions list.
+    await supabase.from('categorization_rules').insert({
+      user_id: user.id,
+      category_id: categoryId,
+      pattern: rule.pattern,
+      match_type: rule.matchType,
+      direction: rule.direction,
+      priority: Math.max(1, rule.priority - 1),
+      created_from_override: true,
+    });
+  }
+
   revalidatePath('/categories');
 }
 
