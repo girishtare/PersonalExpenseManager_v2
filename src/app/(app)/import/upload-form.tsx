@@ -1,6 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface Account {
   id: string;
@@ -47,72 +52,66 @@ export function UploadForm({ accounts }: { accounts: Account[] }) {
   }
 
   if (accounts.length === 0) {
-    return (
-      <p className="text-sm text-zinc-600 dark:text-zinc-400">
-        Add an account first on the Accounts page before importing a statement.
-      </p>
-    );
+    return <p className="text-sm text-muted-foreground">Add an account first on the Accounts page before importing a statement.</p>;
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex max-w-sm flex-col gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-      <label className="flex flex-col gap-1 text-sm">
-        Account
-        <select name="accountId" required className="rounded border border-zinc-300 bg-transparent px-2 py-1 dark:border-zinc-700">
-          {accounts.map((account) => (
-            <option key={account.id} value={account.id}>
-              {account.display_name}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label className="flex flex-col gap-1 text-sm">
-        Statement file (.csv, .xlsx, or .pdf)
-        <input name="file" type="file" accept=".csv,.xlsx,.xls,.pdf" required className="text-sm" />
-      </label>
-
-      <label className="flex flex-col gap-1 text-sm">
-        PDF password (if password-protected)
-        <input
-          name="password"
-          type="password"
-          placeholder="Only needed for protected PDFs"
-          className="rounded border border-zinc-300 bg-transparent px-2 py-1 dark:border-zinc-700"
-        />
-      </label>
-
-      {error && (
-        <p className="text-sm text-red-600">
-          {error}
-          {needsPassword && ' Enter the password above and try again.'}
-        </p>
-      )}
-
-      {result && (
-        <div className="rounded border border-green-600/30 bg-green-600/10 p-3 text-sm">
-          <p>
-            Imported {result.transactionsImported} transaction{result.transactionsImported === 1 ? '' : 's'}
-            {result.transactionsDuplicate > 0 && ` (${result.transactionsDuplicate} duplicate skipped)`}.
-          </p>
-          {result.warnings.length > 0 && (
-            <ul className="mt-2 list-disc pl-4 text-xs text-zinc-600 dark:text-zinc-400">
-              {result.warnings.slice(0, 10).map((warning, i) => (
-                <li key={i}>{warning}</li>
+    <form onSubmit={handleSubmit}>
+      <Card className="flex max-w-sm flex-col gap-3 p-4">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="accountId">Account</Label>
+          <Select name="accountId" defaultValue={accounts[0]?.id} required>
+            <SelectTrigger id="accountId" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {accounts.map((account) => (
+                <SelectItem key={account.id} value={account.id}>
+                  {account.display_name}
+                </SelectItem>
               ))}
-              {result.warnings.length > 10 && <li>...and {result.warnings.length - 10} more</li>}
-            </ul>
-          )}
+            </SelectContent>
+          </Select>
         </div>
-      )}
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-full bg-foreground px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-[#383838] disabled:opacity-50 dark:hover:bg-[#ccc]"
-      >
-        {pending ? 'Uploading…' : 'Upload statement'}
-      </button>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="file">Statement file (.csv, .xlsx, or .pdf)</Label>
+          <Input id="file" name="file" type="file" accept=".csv,.xlsx,.xls,.pdf" required />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="password">PDF password (if password-protected)</Label>
+          <Input id="password" name="password" type="password" placeholder="Only needed for protected PDFs" />
+        </div>
+
+        {error && (
+          <p className="text-sm text-destructive">
+            {error}
+            {needsPassword && ' Enter the password above and try again.'}
+          </p>
+        )}
+
+        {result && (
+          <div className="rounded-md border border-green-600/30 bg-green-600/10 p-3 text-sm">
+            <p>
+              Imported {result.transactionsImported} transaction{result.transactionsImported === 1 ? '' : 's'}
+              {result.transactionsDuplicate > 0 && ` (${result.transactionsDuplicate} duplicate skipped)`}.
+            </p>
+            {result.warnings.length > 0 && (
+              <ul className="mt-2 list-disc pl-4 text-xs text-muted-foreground">
+                {result.warnings.slice(0, 10).map((warning, i) => (
+                  <li key={i}>{warning}</li>
+                ))}
+                {result.warnings.length > 10 && <li>...and {result.warnings.length - 10} more</li>}
+              </ul>
+            )}
+          </div>
+        )}
+
+        <Button type="submit" disabled={pending}>
+          {pending ? 'Uploading…' : 'Upload statement'}
+        </Button>
+      </Card>
     </form>
   );
 }

@@ -1,5 +1,6 @@
 import { requireOwnerUser } from '@/lib/auth/dal';
 import { createClient } from '@/lib/supabase/server';
+import { Card } from '@/components/ui/card';
 import { AddAccountForm } from './add-account-form';
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
@@ -22,14 +23,14 @@ export default async function AccountsPage() {
     <main className="flex flex-1 flex-col gap-8 p-8">
       <h1 className="text-2xl font-semibold">Accounts</h1>
 
-      <section className="flex flex-col gap-3">
+      <Card className="flex flex-col gap-3 p-4">
         {accounts?.length ? (
-          <ul className="flex flex-col divide-y divide-zinc-200 dark:divide-zinc-800">
+          <ul className="flex flex-col divide-y divide-border">
             {accounts.map((account) => (
               <li key={account.id} className="flex items-center justify-between py-3">
                 <div>
                   <p className="font-medium">{account.display_name}</p>
-                  <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                  <p className="text-sm text-muted-foreground">
                     {account.bank_code} &middot; {ACCOUNT_TYPE_LABELS[account.account_type] ?? account.account_type}
                     {account.last4 ? ` · ••${account.last4}` : ''}
                   </p>
@@ -38,9 +39,9 @@ export default async function AccountsPage() {
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">No accounts yet - add one below.</p>
+          <p className="text-sm text-muted-foreground">No accounts yet - add one below.</p>
         )}
-      </section>
+      </Card>
 
       <AddAccountForm />
     </main>

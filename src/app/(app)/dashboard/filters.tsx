@@ -1,10 +1,34 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import type { DateRange } from 'react-day-picker';
+import { CalendarIcon } from 'lucide-react';
+import { buttonVariants } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 
 interface Account {
   id: string;
   display_name: string;
+}
+
+function toDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function parseDateKey(key: string): Date {
+  const [year, month, day] = key.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function formatDisplay(date: Date): string {
+  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 export function DashboardFilters({
@@ -19,6 +43,8 @@ export function DashboardFilters({
   accountId: string;
 }) {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const range: DateRange = { from: parseDateKey(start), to: parseDateKey(end) };
 
   function update(next: Partial<{ start: string; end: string; accountId: string }>) {
     const params = new URLSearchParams({
@@ -31,42 +57,48 @@ export function DashboardFilters({
   }
 
   return (
-    <div className="flex flex-wrap items-end gap-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-xs text-zinc-500 dark:text-zinc-400">Start date</span>
-        <input
-          type="date"
-          defaultValue={start}
-          max={end}
-          onChange={(e) => update({ start: e.target.value })}
-          className="rounded border border-zinc-300 bg-transparent px-2 py-1 text-sm dark:border-zinc-700"
-        />
-      </label>
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-xs text-zinc-500 dark:text-zinc-400">End date</span>
-        <input
-          type="date"
-          defaultValue={end}
-          min={start}
-          onChange={(e) => update({ end: e.target.value })}
-          className="rounded border border-zinc-300 bg-transparent px-2 py-1 text-sm dark:border-zinc-700"
-        />
-      </label>
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-xs text-zinc-500 dark:text-zinc-400">Account</span>
-        <select
-          defaultValue={accountId}
-          onChange={(e) => update({ accountId: e.target.value })}
-          className="rounded border border-zinc-300 bg-transparent px-2 py-1 text-sm dark:border-zinc-700"
+    <div className="flex flex-wrap items-end gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <div className="flex flex-col gap-1.5">
+        <span className="text-xs text-muted-foreground">Date range</span>
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger className={cn(buttonVariants({ variant: 'outline' }), 'h-9 justify-start gap-2 font-normal')}>
+            <CalendarIcon className="h-4 w-4" />
+            {formatDisplay(range.from!)} &ndash; {formatDisplay(range.to!)}
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-2" align="start">
+            <Calendar
+              mode="range"
+              defaultMonth={range.from}
+              selected={range}
+              onSelect={(newRange) => {
+                if (newRange?.from) update({ start: toDateKey(newRange.from) });
+                if (newRange?.to) update({ end: toDateKey(newRange.to) });
+                if (newRange?.from && newRange?.to) setOpen(false);
+              }}
+              numberOfMonths={2}
+            />
+          </PopoverContent>
+        </Popover>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <span className="text-xs text-muted-foreground">Account</span>
+        <Select
+          value={accountId || 'all'}
+          onValueChange={(value) => update({ accountId: !value || value === 'all' ? '' : value })}
         >
-          <option value="">All accounts</option>
-          {accounts.map((account) => (
-            <option key={account.id} value={account.id}>
-              {account.display_name}
-            </option>
-          ))}
-        </select>
-      </label>
+          <SelectTrigger className="w-56">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All accounts</SelectItem>
+            {accounts.map((account) => (
+              <SelectItem key={account.id} value={account.id}>
+                {account.display_name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
     </div>
   );
 }

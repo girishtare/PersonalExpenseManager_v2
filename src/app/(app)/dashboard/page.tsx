@@ -187,7 +187,7 @@ export default async function DashboardPage({
     <main className="flex flex-1 flex-col gap-8 p-8">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="text-sm text-muted-foreground">
           {start.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} &ndash;{' '}
           {end.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
         </p>
@@ -232,19 +232,19 @@ export default async function DashboardPage({
       </section>
 
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card className="flex flex-col gap-4">
+        <Card className="flex flex-col gap-4 p-5">
           <h2 className="font-medium">Income by category</h2>
           <CategoryDonutChart data={incomeCategories} />
         </Card>
-        <Card className="flex flex-col gap-4">
+        <Card className="flex flex-col gap-4 p-5">
           <h2 className="font-medium">Expense by category</h2>
           <CategoryDonutChart data={expenseCategories} />
         </Card>
       </section>
 
-      <Card className="flex flex-col gap-4">
+      <Card className="flex flex-col gap-4 p-5">
         <div className="flex items-center gap-2">
-          <BarChart3 className="h-4 w-4 text-zinc-500" />
+          <BarChart3 className="h-4 w-4 text-muted-foreground" />
           <h2 className="font-medium">Income vs expense - last 12 months</h2>
         </div>
         <MonthlyTrendChart data={trendData} />
@@ -268,19 +268,19 @@ function StatTile({
 }) {
   const deltaColorClass = delta
     ? delta.direction === 'flat'
-      ? 'text-zinc-500 dark:text-zinc-400'
+      ? 'text-muted-foreground'
       : delta.isGood
         ? 'text-emerald-600 dark:text-emerald-500'
-        : 'text-red-600 dark:text-red-500'
+        : 'text-destructive'
     : '';
 
   return (
-    <Card className="flex flex-col gap-3">
+    <Card className="flex flex-col gap-3 p-5">
       <div className="flex items-center gap-3">
         <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${accentClass}`}>
           <Icon className="h-[18px] w-[18px]" />
         </span>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">{label}</p>
+        <p className="text-sm text-muted-foreground">{label}</p>
       </div>
       <p className="text-3xl font-semibold tracking-tight">{value}</p>
       {delta && (

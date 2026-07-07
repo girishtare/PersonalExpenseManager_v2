@@ -1,6 +1,8 @@
 import { requireOwnerUser } from '@/lib/auth/dal';
 import { createClient } from '@/lib/supabase/server';
+import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AddCategoryForm } from './add-category-form';
 import { AddRuleForm } from './add-rule-form';
 import { DeleteRuleButton } from './delete-rule-button';
@@ -36,82 +38,78 @@ export default async function CategoriesPage() {
       </div>
 
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card className="flex flex-col gap-3">
+        <Card className="flex flex-col gap-3 p-4">
           <h2 className="font-medium">Add category</h2>
           <AddCategoryForm />
         </Card>
-        <Card className="flex flex-col gap-3">
+        <Card className="flex flex-col gap-3 p-4">
           <h2 className="font-medium">Add rule</h2>
           <AddRuleForm categories={categories ?? []} />
         </Card>
       </section>
 
-      <Card className="flex flex-col gap-3">
+      <Card className="flex flex-col gap-3 p-4">
         <h2 className="font-medium">Categories</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <p className="mb-1 text-sm text-zinc-600 dark:text-zinc-400">Income</p>
-            <ul className="flex flex-wrap gap-2">
+            <p className="mb-1 text-sm text-muted-foreground">Income</p>
+            <div className="flex flex-wrap gap-2">
               {incomeCategories.map((c) => (
-                <li key={c.id} className="rounded-full border border-zinc-300 px-3 py-1 text-xs dark:border-zinc-700">
+                <Badge key={c.id} variant="secondary">
                   {c.name}
                   {c.user_id && ' (custom)'}
-                </li>
+                </Badge>
               ))}
-            </ul>
+            </div>
           </div>
           <div>
-            <p className="mb-1 text-sm text-zinc-600 dark:text-zinc-400">Expense</p>
-            <ul className="flex flex-wrap gap-2">
+            <p className="mb-1 text-sm text-muted-foreground">Expense</p>
+            <div className="flex flex-wrap gap-2">
               {expenseCategories.map((c) => (
-                <li key={c.id} className="rounded-full border border-zinc-300 px-3 py-1 text-xs dark:border-zinc-700">
+                <Badge key={c.id} variant="secondary">
                   {c.name}
                   {c.user_id && ' (custom)'}
-                </li>
+                </Badge>
               ))}
-            </ul>
+            </div>
           </div>
         </div>
       </Card>
 
-      <Card className="flex flex-col gap-3">
+      <Card className="flex flex-col gap-3 p-4">
         <h2 className="font-medium">Categorization rules</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-zinc-200 text-left dark:border-zinc-800">
-                <th className="py-2 pr-4">Priority</th>
-                <th className="py-2 pr-4">Pattern</th>
-                <th className="py-2 pr-4">Match</th>
-                <th className="py-2 pr-4">Direction</th>
-                <th className="py-2 pr-4">Category</th>
-                <th className="py-2 pr-4">Source</th>
-                <th className="py-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {(rules ?? []).map((rule) => (
-                <tr key={rule.id} className="border-b border-zinc-100 dark:border-zinc-900">
-                  <td className="py-2 pr-4">{rule.priority}</td>
-                  <td className="py-2 pr-4 font-mono text-xs">{rule.pattern}</td>
-                  <td className="py-2 pr-4">{rule.match_type}</td>
-                  <td className="py-2 pr-4">{rule.direction ?? 'any'}</td>
-                  <td className="py-2 pr-4">
-                    {rule.user_id ? (
-                      <RuleCategoryPicker ruleId={rule.id} categoryId={rule.category_id} categories={categories ?? []} />
-                    ) : (
-                      (categories ?? []).find((c) => c.id === rule.category_id)?.name
-                    )}
-                  </td>
-                  <td className="py-2 pr-4 text-zinc-600 dark:text-zinc-400">
-                    {rule.user_id ? 'yours' : 'system'}
-                  </td>
-                  <td className="py-2">{rule.user_id && <DeleteRuleButton ruleId={rule.id} />}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Priority</TableHead>
+              <TableHead>Pattern</TableHead>
+              <TableHead>Match</TableHead>
+              <TableHead>Direction</TableHead>
+              <TableHead>Category</TableHead>
+              <TableHead>Source</TableHead>
+              <TableHead></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {(rules ?? []).map((rule) => (
+              <TableRow key={rule.id}>
+                <TableCell>{rule.priority}</TableCell>
+                <TableCell className="font-mono text-xs">{rule.pattern}</TableCell>
+                <TableCell>{rule.match_type}</TableCell>
+                <TableCell>{rule.direction ?? 'any'}</TableCell>
+                <TableCell>
+                  {rule.user_id ? (
+                    <RuleCategoryPicker ruleId={rule.id} categoryId={rule.category_id} categories={categories ?? []} />
+                  ) : (
+                    (categories ?? []).find((c) => c.id === rule.category_id)?.name
+                  )}
+                </TableCell>
+                <TableCell className="text-muted-foreground">{rule.user_id ? 'yours' : 'system'}</TableCell>
+                <TableCell>{rule.user_id && <DeleteRuleButton ruleId={rule.id} />}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </Card>
     </main>
   );

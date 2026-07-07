@@ -30,7 +30,7 @@ export function CategoryDonutChart({ data }: { data: CategoryAmount[] }) {
   const total = rows.reduce((sum, row) => sum + row.amount, 0);
 
   if (rows.length === 0 || total === 0) {
-    return <p className="text-sm text-zinc-600 dark:text-zinc-400">No data for this period yet.</p>;
+    return <p className="text-sm text-muted-foreground">No data for this period yet.</p>;
   }
 
   return (

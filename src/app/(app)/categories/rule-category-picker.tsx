@@ -1,6 +1,15 @@
 'use client';
 
 import { useTransition } from 'react';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { updateRuleCategory } from './actions';
 
 interface Category {
@@ -21,35 +30,41 @@ export function RuleCategoryPicker({
   const [isPending, startTransition] = useTransition();
 
   return (
-    <select
+    <Select
       defaultValue={categoryId}
       disabled={isPending}
-      onChange={(event) => {
-        const newCategoryId = event.target.value;
+      onValueChange={(newCategoryId) => {
+        if (!newCategoryId) return;
         startTransition(() => {
           updateRuleCategory(ruleId, newCategoryId);
         });
       }}
-      className="rounded border border-zinc-300 bg-transparent px-1 py-0.5 text-xs dark:border-zinc-700"
     >
-      <optgroup label="Income">
-        {categories
-          .filter((c) => c.type === 'income')
-          .map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-      </optgroup>
-      <optgroup label="Expense">
-        {categories
-          .filter((c) => c.type === 'expense')
-          .map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-      </optgroup>
-    </select>
+      <SelectTrigger size="sm" className="text-xs">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectGroup>
+          <SelectLabel>Income</SelectLabel>
+          {categories
+            .filter((c) => c.type === 'income')
+            .map((c) => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.name}
+              </SelectItem>
+            ))}
+        </SelectGroup>
+        <SelectGroup>
+          <SelectLabel>Expense</SelectLabel>
+          {categories
+            .filter((c) => c.type === 'expense')
+            .map((c) => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.name}
+              </SelectItem>
+            ))}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
   );
 }

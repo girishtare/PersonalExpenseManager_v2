@@ -1,6 +1,11 @@
 'use client';
 
 import { useActionState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createAccount, type AddAccountState } from './actions';
 
 const initialState: AddAccountState = {};
@@ -9,67 +14,53 @@ export function AddAccountForm() {
   const [state, formAction, pending] = useActionState(createAccount, initialState);
 
   return (
-    <form
-      action={formAction}
-      className="flex max-w-sm flex-col gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800"
-    >
-      <h2 className="font-medium">Add account</h2>
+    <form action={formAction}>
+      <Card className="flex max-w-sm flex-col gap-3 p-4">
+        <h2 className="font-medium">Add account</h2>
 
-      <label className="flex flex-col gap-1 text-sm">
-        Bank
-        <select
-          disabled
-          defaultValue="HDFC"
-          className="rounded border border-zinc-300 bg-transparent px-2 py-1 dark:border-zinc-700"
-        >
-          <option value="HDFC">HDFC Bank</option>
-        </select>
-        <span className="text-xs text-zinc-500">More banks coming later.</span>
-      </label>
+        <div className="flex flex-col gap-1.5">
+          <Label>Bank</Label>
+          <Select defaultValue="HDFC" disabled>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="HDFC">HDFC Bank</SelectItem>
+            </SelectContent>
+          </Select>
+          <span className="text-xs text-muted-foreground">More banks coming later.</span>
+        </div>
 
-      <label className="flex flex-col gap-1 text-sm">
-        Account type
-        <select
-          name="accountType"
-          required
-          defaultValue="savings"
-          className="rounded border border-zinc-300 bg-transparent px-2 py-1 dark:border-zinc-700"
-        >
-          <option value="savings">Savings</option>
-          <option value="current">Current</option>
-          <option value="credit_card">Credit Card</option>
-        </select>
-      </label>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="accountType">Account type</Label>
+          <Select name="accountType" defaultValue="savings" required>
+            <SelectTrigger id="accountType" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="savings">Savings</SelectItem>
+              <SelectItem value="current">Current</SelectItem>
+              <SelectItem value="credit_card">Credit Card</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-      <label className="flex flex-col gap-1 text-sm">
-        Name
-        <input
-          name="displayName"
-          required
-          placeholder="e.g. HDFC Salary Account"
-          className="rounded border border-zinc-300 bg-transparent px-2 py-1 dark:border-zinc-700"
-        />
-      </label>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="displayName">Name</Label>
+          <Input id="displayName" name="displayName" required placeholder="e.g. HDFC Salary Account" />
+        </div>
 
-      <label className="flex flex-col gap-1 text-sm">
-        Last 4 digits (optional)
-        <input
-          name="last4"
-          maxLength={4}
-          placeholder="1234"
-          className="rounded border border-zinc-300 bg-transparent px-2 py-1 dark:border-zinc-700"
-        />
-      </label>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="last4">Last 4 digits (optional)</Label>
+          <Input id="last4" name="last4" maxLength={4} placeholder="1234" />
+        </div>
 
-      {state?.error && <p className="text-sm text-red-600">{state.error}</p>}
+        {state?.error && <p className="text-sm text-destructive">{state.error}</p>}
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-full bg-foreground px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-[#383838] disabled:opacity-50 dark:hover:bg-[#ccc]"
-      >
-        {pending ? 'Adding…' : 'Add account'}
-      </button>
+        <Button type="submit" disabled={pending}>
+          {pending ? 'Adding…' : 'Add account'}
+        </Button>
+      </Card>
     </form>
   );
 }
