@@ -7,6 +7,10 @@ import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service';
 import { categorizeTransaction, getUncategorizedCategoryId, loadActiveRules } from '@/lib/categorization/engine';
 
+// The import pipeline finds its fallback bucket by name (see getUncategorizedCategoryId) -
+// renaming or deleting it would silently break every future statement import.
+const UNCATEGORIZED_NAME_RE = /^uncategori[sz]ed$/i;
+
 const AddCategorySchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(60),
   type: z.enum(['income', 'expense']),
@@ -53,8 +57,11 @@ export async function updateCategory(categoryId: string, name: string): Promise<
   }
 
   const supabase = await createClient();
-  const { data: category } = await supabase.from('categories').select('user_id').eq('id', categoryId).maybeSingle();
+  const { data: category } = await supabase.from('categories').select('user_id, name').eq('id', categoryId).maybeSingle();
   if (!category) return { error: 'Category not found.' };
+  if (!category.user_id && UNCATEGORIZED_NAME_RE.test(category.name)) {
+    return { error: 'The "Uncategorized" category is used internally by imports and can\'t be renamed.' };
+  }
 
   // System categories (user_id null) are read-only under RLS, so use the service-role
   // client for those - safe here since requireOwnerUser() already gated this call to
@@ -72,8 +79,11 @@ export async function updateCategory(categoryId: string, name: string): Promise<
 export async function deleteCategory(categoryId: string): Promise<CategoryActionState> {
   await requireOwnerUser();
   const supabase = await createClient();
-  const { data: category } = await supabase.from('categories').select('user_id').eq('id', categoryId).maybeSingle();
+  const { data: category } = await supabase.from('categories').select('user_id, name').eq('id', categoryId).maybeSingle();
   if (!category) return { error: 'Category not found.' };
+  if (!category.user_id && UNCATEGORIZED_NAME_RE.test(category.name)) {
+    return { error: 'The "Uncategorized" category is used internally by imports and can\'t be deleted.' };
+  }
 
   const client = category.user_id ? supabase : createServiceClient();
   const { error } = await client.from('categories').delete().eq('id', categoryId);

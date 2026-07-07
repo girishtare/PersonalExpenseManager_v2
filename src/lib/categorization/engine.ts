@@ -80,11 +80,14 @@ export async function loadActiveRules(
 }
 
 export async function getUncategorizedCategoryId(supabase: SupabaseClient): Promise<string> {
+  // Tolerates both "Uncategorized" and "Uncategorised" - the app can't stop a category badge
+  // rename from spelling it either way, so the fallback lookup shouldn't depend on one exact
+  // spelling (see also the rename/delete guard in categories/actions.ts).
   const { data, error } = await supabase
     .from('categories')
     .select('id')
     .is('user_id', null)
-    .eq('name', 'Uncategorized')
+    .ilike('name', 'uncategori_ed')
     .single();
 
   if (error || !data) {

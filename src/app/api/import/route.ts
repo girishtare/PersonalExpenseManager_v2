@@ -111,33 +111,40 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 
-  const rules = await loadActiveRules(supabase, user.id);
-  const uncategorizedId = await getUncategorizedCategoryId(supabase);
+  let rows;
+  try {
+    const rules = await loadActiveRules(supabase, user.id);
+    const uncategorizedId = await getUncategorizedCategoryId(supabase);
 
-  const rows = parsed.transactions.map((txn) => {
-    const { categoryId, ruleId } = categorizeTransaction(txn.descriptionRaw, txn.direction, rules, uncategorizedId);
-    return {
-      user_id: user.id,
-      account_id: account.id,
-      statement_id: statementId,
-      txn_date: txn.txnDate,
-      value_date: txn.valueDate ?? null,
-      description_raw: txn.descriptionRaw,
-      amount: txn.amount,
-      direction: txn.direction,
-      category_id: categoryId,
-      categorization_rule_id: ruleId,
-      reference_no: txn.referenceNo ?? null,
-      dedupe_hash: computeDedupeHash({
-        accountId: account.id,
-        txnDate: txn.txnDate,
+    rows = parsed.transactions.map((txn) => {
+      const { categoryId, ruleId } = categorizeTransaction(txn.descriptionRaw, txn.direction, rules, uncategorizedId);
+      return {
+        user_id: user.id,
+        account_id: account.id,
+        statement_id: statementId,
+        txn_date: txn.txnDate,
+        value_date: txn.valueDate ?? null,
+        description_raw: txn.descriptionRaw,
         amount: txn.amount,
         direction: txn.direction,
-        descriptionRaw: txn.descriptionRaw,
-        referenceNo: txn.referenceNo,
-      }),
-    };
-  });
+        category_id: categoryId,
+        categorization_rule_id: ruleId,
+        reference_no: txn.referenceNo ?? null,
+        dedupe_hash: computeDedupeHash({
+          accountId: account.id,
+          txnDate: txn.txnDate,
+          amount: txn.amount,
+          direction: txn.direction,
+          descriptionRaw: txn.descriptionRaw,
+          referenceNo: txn.referenceNo,
+        }),
+      };
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error while categorizing transactions';
+    await supabase.from('statements').update({ parse_status: 'failed', parse_error: message }).eq('id', statementId);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 
   let importedCount = 0;
   if (rows.length > 0) {
