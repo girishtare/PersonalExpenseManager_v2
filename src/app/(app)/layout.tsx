@@ -5,6 +5,7 @@ const NAV_LINKS = [
   { href: '/accounts', label: 'Accounts' },
   { href: '/import', label: 'Import' },
   { href: '/transactions', label: 'Transactions' },
+  { href: '/categories', label: 'Categories' },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
