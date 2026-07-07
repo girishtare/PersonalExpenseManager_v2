@@ -1,7 +1,7 @@
 import Papa from 'papaparse';
 import ExcelJS from 'exceljs';
 import * as cheerio from 'cheerio';
-import type { AccountContext, BankStatementParser, ParsedStatement, RawParsedTransaction } from '../types';
+import type { BankStatementParser, ParsedStatement, RawParsedTransaction } from '../types';
 import { buildParsedStatementFromRows, normalizeSlashDate, parseAmount } from '../tabular';
 import { StatementPasswordError } from '../errors';
 
@@ -174,8 +174,7 @@ async function parsePDF(fileContent: Buffer, password: string | undefined): Prom
 export const hdfcParser: BankStatementParser = {
   bankCode: 'HDFC',
   supportedFormats: ['csv', 'xlsx', 'pdf'],
-  parseCSV: (fileContent: Buffer, _ctx: AccountContext) => parseCSV(fileContent),
-  parseExcel: (fileContent: Buffer, _ctx: AccountContext) => parseExcel(fileContent),
-  parsePDF: (fileContent: Buffer, password: string | undefined, _ctx: AccountContext) =>
-    parsePDF(fileContent, password),
+  parseCSV: (fileContent: Buffer) => parseCSV(fileContent),
+  parseExcel: (fileContent: Buffer) => parseExcel(fileContent),
+  parsePDF: (fileContent: Buffer, password: string | undefined) => parsePDF(fileContent, password),
 };
