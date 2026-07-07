@@ -1,4 +1,4 @@
-import type { ParsedStatement, RawParsedTransaction } from './types';
+import type { AccountType, ParsedStatement, RawParsedTransaction } from './types';
 
 /** Matches dd/mm/yy, dd/mm/yyyy, dd-mm-yy, dd-mm-yyyy. */
 const DATE_RE = /^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$/;
@@ -33,6 +33,8 @@ const HEADER_ALIASES = {
   credit: [/deposit/i, /credit/i],
   refNo: [/chq/i, /ref/i],
   balance: [/closing balance/i, /^balance/i],
+  amount: [/^amount/i, /^amt/i],
+  crDrType: [/^type$/i, /cr\s*\/?\s*dr/i, /dr\s*\/?\s*cr/i, /transaction type/i],
 };
 
 function findColumn(headerRow: string[], aliases: RegExp[]): number {
@@ -111,4 +113,96 @@ export function buildParsedStatementFromRows(rows: string[][]): ParsedStatement 
     transactions,
     warnings,
   };
+}
+
+// Matches an amount cell like "1,234.56" or "1,234.56 Cr" - the numeric part plus an optional
+// trailing Cr marker (same "Cr"/"CR"-only convention already confirmed for the PDF export of
+// this statement type - a lone "C" is not a credit marker there either).
+const AMOUNT_WITH_MARKER_RE = /^([\d,]+\.\d{2})\s*(Cr|CR|C)?$/;
+
+/**
+ * HDFC credit card statements (Excel/CSV export) use a single Amount column rather than the
+ * separate debit/credit columns a savings/current NetBanking export has - credits (payments,
+ * refunds) are marked either by a dedicated Type/Cr-Dr column, or by a trailing "Cr" suffix
+ * directly on the amount cell. Unlike the savings/current parser above, this hasn't been
+ * verified against a real credit card export yet - the row shape is a best-effort guess from
+ * the known PDF format for the same statement type, so expect this to need tuning once tried
+ * against a real file (parse warnings below should surface anything it can't handle).
+ */
+export function buildCreditCardStatementFromRows(rows: string[][]): ParsedStatement {
+  const headerIdx = rows.findIndex(
+    (row) =>
+      findColumn(row, HEADER_ALIASES.date) !== -1 &&
+      findColumn(row, HEADER_ALIASES.narration) !== -1 &&
+      findColumn(row, HEADER_ALIASES.amount) !== -1
+  );
+
+  if (headerIdx === -1) {
+    return {
+      periodStart: null,
+      periodEnd: null,
+      transactions: [],
+      warnings: [
+        'Could not locate a header row (expected columns like Date/Transaction Description/Amount). ' +
+          'The HDFC credit card export format may differ from what this parser expects.',
+      ],
+    };
+  }
+
+  const header = rows[headerIdx];
+  const col = {
+    date: findColumn(header, HEADER_ALIASES.date),
+    narration: findColumn(header, HEADER_ALIASES.narration),
+    amount: findColumn(header, HEADER_ALIASES.amount),
+    crDrType: findColumn(header, HEADER_ALIASES.crDrType),
+    refNo: findColumn(header, HEADER_ALIASES.refNo),
+  };
+
+  const transactions: RawParsedTransaction[] = [];
+  const warnings: string[] = [];
+
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const row = rows[i];
+    const rawDate = col.date !== -1 ? row[col.date] : undefined;
+    if (!isLikelyDate(rawDate)) continue; // footer/summary row (e.g. "Total due...") - stop silently
+
+    const rawAmountCell = (col.amount !== -1 ? row[col.amount] : undefined)?.trim() ?? '';
+    const amountMatch = rawAmountCell.match(AMOUNT_WITH_MARKER_RE);
+    const amount = parseAmount(amountMatch ? amountMatch[1] : rawAmountCell);
+
+    if (!amount) {
+      warnings.push(`Row ${i + 1}: no amount found, skipped ("${row.join(' | ')}")`);
+      continue;
+    }
+
+    let direction: 'debit' | 'credit' = 'debit';
+    if (col.crDrType !== -1) {
+      direction = /^cr/i.test(row[col.crDrType]?.trim() ?? '') ? 'credit' : 'debit';
+    } else if (amountMatch?.[2]?.toLowerCase() === 'cr') {
+      direction = 'credit';
+    }
+
+    const txnDate = normalizeSlashDate(rawDate);
+    if (!txnDate) continue;
+
+    transactions.push({
+      txnDate,
+      descriptionRaw: (col.narration !== -1 ? row[col.narration] : '')?.trim() ?? '',
+      amount,
+      direction,
+      referenceNo: col.refNo !== -1 ? row[col.refNo]?.trim() || undefined : undefined,
+    });
+  }
+
+  return {
+    periodStart: transactions[0]?.txnDate ?? null,
+    periodEnd: transactions.at(-1)?.txnDate ?? null,
+    transactions,
+    warnings,
+  };
+}
+
+/** Dispatches to the credit-card or savings/current row shape based on the account being imported into. */
+export function buildStatementFromRows(rows: string[][], accountType: AccountType): ParsedStatement {
+  return accountType === 'credit_card' ? buildCreditCardStatementFromRows(rows) : buildParsedStatementFromRows(rows);
 }

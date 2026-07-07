@@ -2,14 +2,14 @@ import Papa from 'papaparse';
 import ExcelJS from 'exceljs';
 import * as XLSX from 'xlsx';
 import * as cheerio from 'cheerio';
-import type { BankStatementParser, ParsedStatement, RawParsedTransaction } from '../types';
-import { buildParsedStatementFromRows, normalizeSlashDate, parseAmount } from '../tabular';
+import type { AccountContext, BankStatementParser, ParsedStatement, RawParsedTransaction } from '../types';
+import { buildStatementFromRows, normalizeSlashDate, parseAmount } from '../tabular';
 import { StatementPasswordError } from '../errors';
 
-async function parseCSV(fileContent: Buffer): Promise<ParsedStatement> {
+async function parseCSV(fileContent: Buffer, ctx: AccountContext): Promise<ParsedStatement> {
   const text = fileContent.toString('utf-8');
   const result = Papa.parse<string[]>(text, { skipEmptyLines: true });
-  return buildParsedStatementFromRows(result.data);
+  return buildStatementFromRows(result.data, ctx.accountType);
 }
 
 function isZipMagic(buf: Buffer): boolean {
@@ -20,7 +20,7 @@ function isOleMagic(buf: Buffer): boolean {
   return buf.length > 4 && buf[0] === 0xd0 && buf[1] === 0xcf && buf[2] === 0x11 && buf[3] === 0xe0;
 }
 
-async function parseRealXlsx(fileContent: Buffer): Promise<ParsedStatement> {
+async function parseRealXlsx(fileContent: Buffer, ctx: AccountContext): Promise<ParsedStatement> {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(fileContent as unknown as ArrayBuffer);
   const sheet = workbook.worksheets[0];
@@ -29,7 +29,7 @@ async function parseRealXlsx(fileContent: Buffer): Promise<ParsedStatement> {
     const values = (row.values as ExcelJS.CellValue[]).slice(1).map((v) => (v == null ? '' : String(v)));
     rows.push(values);
   });
-  return buildParsedStatementFromRows(rows);
+  return buildStatementFromRows(rows, ctx.accountType);
 }
 
 /**
@@ -39,14 +39,14 @@ async function parseRealXlsx(fileContent: Buffer): Promise<ParsedStatement> {
  * build carries the fixes). Scoped to only this legacy-binary path so the rest of the import
  * pipeline doesn't depend on it.
  */
-function parseLegacyXls(fileContent: Buffer): ParsedStatement {
+function parseLegacyXls(fileContent: Buffer, ctx: AccountContext): ParsedStatement {
   const workbook = XLSX.read(fileContent, { type: 'buffer' });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows: string[][] = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, raw: false, defval: '' });
-  return buildParsedStatementFromRows(rows);
+  return buildStatementFromRows(rows, ctx.accountType);
 }
 
-function parseHtmlTableStatement(html: string): ParsedStatement {
+function parseHtmlTableStatement(html: string, ctx: AccountContext): ParsedStatement {
   const $ = cheerio.load(html);
   const rows: string[][] = [];
   $('table tr').each((_, tr) => {
@@ -58,25 +58,27 @@ function parseHtmlTableStatement(html: string): ParsedStatement {
       });
     if (cells.length) rows.push(cells);
   });
-  return buildParsedStatementFromRows(rows);
+  return buildStatementFromRows(rows, ctx.accountType);
 }
 
 /**
- * HDFC NetBanking's "Excel" export is inconsistent in practice: sometimes a real .xlsx,
- * occasionally a legacy binary .xls, and very often actually an HTML table saved with an
- * .xls extension (a common quirk across Indian bank NetBanking portals). We sniff the real
- * content rather than trusting the file extension.
+ * HDFC's "Excel" export is inconsistent in practice: sometimes a real .xlsx, occasionally a
+ * legacy binary .xls, and very often actually an HTML table saved with an .xls extension (a
+ * common quirk across Indian bank NetBanking/statement portals). We sniff the real content
+ * rather than trusting the file extension. The row shape itself then depends on the account:
+ * savings/current exports have separate debit/credit columns, credit card exports have a
+ * single Amount column (see buildStatementFromRows).
  */
-async function parseExcel(fileContent: Buffer): Promise<ParsedStatement> {
+async function parseExcel(fileContent: Buffer, ctx: AccountContext): Promise<ParsedStatement> {
   if (isZipMagic(fileContent)) {
-    return parseRealXlsx(fileContent);
+    return parseRealXlsx(fileContent, ctx);
   }
   if (isOleMagic(fileContent)) {
-    return parseLegacyXls(fileContent);
+    return parseLegacyXls(fileContent, ctx);
   }
   const text = fileContent.toString('utf-8');
   if (/<html|<table/i.test(text.slice(0, 2000))) {
-    return parseHtmlTableStatement(text);
+    return parseHtmlTableStatement(text, ctx);
   }
   return {
     periodStart: null,
@@ -211,7 +213,7 @@ async function parsePDF(fileContent: Buffer, password: string | undefined): Prom
 export const hdfcParser: BankStatementParser = {
   bankCode: 'HDFC',
   supportedFormats: ['csv', 'xlsx', 'pdf'],
-  parseCSV: (fileContent: Buffer) => parseCSV(fileContent),
-  parseExcel: (fileContent: Buffer) => parseExcel(fileContent),
+  parseCSV: (fileContent: Buffer, ctx: AccountContext) => parseCSV(fileContent, ctx),
+  parseExcel: (fileContent: Buffer, ctx: AccountContext) => parseExcel(fileContent, ctx),
   parsePDF: (fileContent: Buffer, password: string | undefined) => parsePDF(fileContent, password),
 };
