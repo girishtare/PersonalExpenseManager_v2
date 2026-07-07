@@ -1,6 +1,7 @@
 'use server';
 
 import { z } from 'zod';
+import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { requireOwnerUser } from '@/lib/auth/dal';
 import { createClient } from '@/lib/supabase/server';
@@ -48,4 +49,44 @@ export async function createAccount(_prevState: AddAccountState | undefined, for
 
   revalidatePath('/accounts');
   return {};
+}
+
+const UpdateAccountSchema = AddAccountSchema.extend({
+  id: z.string().uuid(),
+});
+
+export async function updateAccount(
+  _prevState: AddAccountState | undefined,
+  formData: FormData
+): Promise<AddAccountState> {
+  const user = await requireOwnerUser();
+
+  const parsed = UpdateAccountSchema.safeParse({
+    id: formData.get('id'),
+    accountType: formData.get('accountType'),
+    displayName: formData.get('displayName'),
+    last4: formData.get('last4'),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Invalid input' };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('accounts')
+    .update({
+      account_type: parsed.data.accountType,
+      display_name: parsed.data.displayName,
+      last4: parsed.data.last4 || null,
+    })
+    .eq('id', parsed.data.id)
+    .eq('user_id', user.id);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath('/accounts');
+  redirect('/accounts');
 }
