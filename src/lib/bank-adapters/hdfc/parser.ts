@@ -1,3 +1,4 @@
+import { createRequire } from 'module';
 import Papa from 'papaparse';
 import ExcelJS from 'exceljs';
 import * as cheerio from 'cheerio';
@@ -124,6 +125,15 @@ async function parsePDF(fileContent: Buffer, password: string | undefined): Prom
   }
 
   const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+
+  // Under Turbopack's dev bundler, pdfjs's own relative-path auto-discovery of its worker
+  // script resolves against the dev chunk layout (not the real on-disk module location) and
+  // fails with "Setting up fake worker failed: Cannot find module .../pdf.worker.mjs". Point
+  // it at the real file via Node's own module resolution instead of pdfjs's auto-detection.
+  if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+    const require = createRequire(import.meta.url);
+    pdfjsLib.GlobalWorkerOptions.workerSrc = require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs');
+  }
 
   let doc;
   try {
