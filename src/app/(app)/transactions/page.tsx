@@ -46,7 +46,7 @@ export default async function TransactionsPage() {
                 <TableRow key={txn.id}>
                   <TableCell>{txn.txn_date}</TableCell>
                   <TableCell className="max-w-xs truncate whitespace-normal">{txn.description_raw}</TableCell>
-                  <TableCell>{(txn.accounts as unknown as { display_name: string }[] | null)?.[0]?.display_name}</TableCell>
+                  <TableCell>{(txn.accounts as unknown as { display_name: string } | null)?.display_name}</TableCell>
                   <TableCell
                     className={`text-right tabular-nums ${txn.direction === 'credit' ? 'text-emerald-600 dark:text-emerald-500' : ''}`}
                   >
