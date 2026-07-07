@@ -1,4 +1,3 @@
-import { createRequire } from 'module';
 import Papa from 'papaparse';
 import ExcelJS from 'exceljs';
 import * as cheerio from 'cheerio';
@@ -126,13 +125,17 @@ async function parsePDF(fileContent: Buffer, password: string | undefined): Prom
 
   const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
 
-  // Under Turbopack's dev bundler, pdfjs's own relative-path auto-discovery of its worker
-  // script resolves against the dev chunk layout (not the real on-disk module location) and
-  // fails with "Setting up fake worker failed: Cannot find module .../pdf.worker.mjs". Point
-  // it at the real file via Node's own module resolution instead of pdfjs's auto-detection.
-  if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-    const require = createRequire(import.meta.url);
-    pdfjsLib.GlobalWorkerOptions.workerSrc = require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs');
+  // pdfjs's own "fake worker" fallback (used since Node has no real Worker/DOM) does
+  // `import(this.workerSrc)` with a *runtime-computed* path - Turbopack can't statically
+  // analyze that, so it rewrites the call against its own dev-chunk layout instead of the
+  // real on-disk module, failing with "Setting up fake worker failed: Cannot find module
+  // .../pdf.worker.mjs" (setting GlobalWorkerOptions.workerSrc has no effect on this, since
+  // Turbopack's rewrite ignores the runtime string value entirely). Pre-populate the
+  // mainThread hook pdfjs checks *before* that broken path, via our own dynamic import with a
+  // literal string specifier - which Turbopack bundles correctly, same as the pdf.mjs import above.
+  if (!(globalThis as Record<string, unknown>).pdfjsWorker) {
+    const { WorkerMessageHandler } = await import('pdfjs-dist/legacy/build/pdf.worker.mjs');
+    (globalThis as Record<string, unknown>).pdfjsWorker = { WorkerMessageHandler };
   }
 
   let doc;
