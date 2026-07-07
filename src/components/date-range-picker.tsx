@@ -54,7 +54,7 @@ export function DateRangePicker({
       : 'All dates';
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex w-full min-w-0 items-center gap-1">
       <Popover
         open={open}
         onOpenChange={(next) => {
@@ -62,7 +62,9 @@ export function DateRangePicker({
           if (next) setPendingRange(committedRange); // reset to the committed range each time it opens
         }}
       >
-        <PopoverTrigger className={cn(buttonVariants({ variant: 'outline' }), 'h-9 w-full justify-start gap-2 font-normal')}>
+        <PopoverTrigger
+          className={cn(buttonVariants({ variant: 'outline' }), 'h-9 min-w-0 flex-1 justify-start gap-2 font-normal')}
+        >
           <CalendarIcon className="h-4 w-4 shrink-0" />
           <span className="truncate">{label}</span>
         </PopoverTrigger>
@@ -97,7 +99,7 @@ export function DateRangePicker({
         </PopoverContent>
       </Popover>
       {onClear && committedRange.from && (
-        <Button type="button" variant="ghost" size="icon-sm" onClick={onClear} aria-label="Clear date range">
+        <Button type="button" variant="ghost" size="icon-sm" className="shrink-0" onClick={onClear} aria-label="Clear date range">
           <X className="h-4 w-4" />
         </Button>
       )}
