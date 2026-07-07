@@ -1,6 +1,6 @@
 'use client';
 
-import { useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import {
   Select,
   SelectContent,
@@ -28,14 +28,16 @@ export function CategoryPicker({
   categories: Category[];
 }) {
   const [isPending, startTransition] = useTransition();
+  const [value, setValue] = useState(categoryId);
 
   return (
     <Select
       items={categories.map((c) => ({ value: c.id, label: c.name }))}
-      defaultValue={categoryId}
+      value={value}
       disabled={isPending}
       onValueChange={(newCategoryId) => {
         if (!newCategoryId) return;
+        setValue(newCategoryId);
         startTransition(() => {
           updateTransactionCategory(transactionId, newCategoryId);
         });

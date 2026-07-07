@@ -40,6 +40,45 @@ export async function createCategory(
   return {};
 }
 
+export interface CategoryActionState {
+  error?: string;
+}
+
+export async function updateCategory(categoryId: string, name: string): Promise<CategoryActionState> {
+  const user = await requireOwnerUser();
+  const trimmed = name.trim();
+  if (!trimmed || trimmed.length > 60) {
+    return { error: 'Name must be 1-60 characters.' };
+  }
+
+  const supabase = await createClient();
+  // RLS also scopes this to user_id = auth.uid(), so it's a no-op against system categories.
+  const { error } = await supabase.from('categories').update({ name: trimmed }).eq('id', categoryId).eq('user_id', user.id);
+  if (error) return { error: error.message };
+
+  revalidatePath('/categories');
+  revalidatePath('/transactions');
+  revalidatePath('/dashboard');
+  return {};
+}
+
+export async function deleteCategory(categoryId: string): Promise<CategoryActionState> {
+  const user = await requireOwnerUser();
+  const supabase = await createClient();
+
+  const { error } = await supabase.from('categories').delete().eq('id', categoryId).eq('user_id', user.id);
+  if (error) {
+    // Postgres FK violation - category is still referenced by a rule or transaction.
+    if (error.code === '23503') {
+      return { error: 'This category is still used by a rule or transaction - reassign those first.' };
+    }
+    return { error: error.message };
+  }
+
+  revalidatePath('/categories');
+  return {};
+}
+
 const AddRuleSchema = z.object({
   categoryId: z.string().uuid(),
   pattern: z.string().trim().min(1, 'Pattern is required').max(100),

@@ -1,10 +1,10 @@
 import { requireOwnerUser } from '@/lib/auth/dal';
 import { createClient } from '@/lib/supabase/server';
-import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AddCategoryForm } from './add-category-form';
 import { AddRuleForm } from './add-rule-form';
+import { CategoryBadge } from './category-badge';
 import { DeleteRuleButton } from './delete-rule-button';
 import { RecalculateButton } from './recalculate-button';
 import { RuleCategoryPicker } from './rule-category-picker';
@@ -50,15 +50,16 @@ export default async function CategoriesPage() {
 
       <Card className="flex flex-col gap-3 p-4">
         <h2 className="font-medium">Categories</h2>
+        <p className="text-xs text-muted-foreground">
+          Click a custom category to rename or delete it. System categories are shared defaults and can&apos;t be
+          edited.
+        </p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <p className="mb-1 text-sm text-muted-foreground">Income</p>
             <div className="flex flex-wrap gap-2">
               {incomeCategories.map((c) => (
-                <Badge key={c.id} variant="secondary">
-                  {c.name}
-                  {c.user_id && ' (custom)'}
-                </Badge>
+                <CategoryBadge key={c.id} category={c} />
               ))}
             </div>
           </div>
@@ -66,10 +67,7 @@ export default async function CategoriesPage() {
             <p className="mb-1 text-sm text-muted-foreground">Expense</p>
             <div className="flex flex-wrap gap-2">
               {expenseCategories.map((c) => (
-                <Badge key={c.id} variant="secondary">
-                  {c.name}
-                  {c.user_id && ' (custom)'}
-                </Badge>
+                <CategoryBadge key={c.id} category={c} />
               ))}
             </div>
           </div>

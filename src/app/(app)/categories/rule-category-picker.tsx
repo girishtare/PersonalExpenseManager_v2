@@ -1,6 +1,6 @@
 'use client';
 
-import { useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import {
   Select,
   SelectContent,
@@ -30,14 +30,16 @@ interface Rule {
 
 export function RuleCategoryPicker({ rule, categories }: { rule: Rule; categories: Category[] }) {
   const [isPending, startTransition] = useTransition();
+  const [value, setValue] = useState(rule.category_id);
 
   return (
     <Select
       items={categories.map((c) => ({ value: c.id, label: c.name }))}
-      defaultValue={rule.category_id}
+      value={value}
       disabled={isPending}
       onValueChange={(newCategoryId) => {
         if (!newCategoryId) return;
+        setValue(newCategoryId);
         startTransition(() => {
           updateRuleCategory(
             {
