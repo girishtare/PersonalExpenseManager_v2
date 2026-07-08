@@ -180,6 +180,8 @@ export async function POST(request: Request) {
       statement_period_end: parsed.periodEnd,
       transactions_imported_count: importedCount,
       transactions_duplicate_count: duplicateCount,
+      total_amount_due: parsed.totalAmountDue ?? null,
+      opening_balance: parsed.openingBalance ?? null,
     })
     .eq('id', statementId);
 

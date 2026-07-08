@@ -116,6 +116,19 @@ function parseHdfcCcLine(line: string): RawParsedTransaction | null {
   };
 }
 
+// Best-effort only - unlike CC_LINE_RE (tuned against 44 real rows), this hasn't been verified
+// against a real PDF statement's linearized text. Undefined when not found is the expected,
+// non-fatal outcome; the reconciliation view treats that as "not verifiable", not a mismatch.
+const TOTAL_AMOUNT_DUE_RE = /total\s*amount\s*due\D{0,20}?([\d,]+\.\d{2})/i;
+
+function extractTotalAmountDueFromLines(lines: string[]): number | undefined {
+  for (const line of lines) {
+    const match = line.match(TOTAL_AMOUNT_DUE_RE);
+    if (match) return parseAmount(match[1]) || undefined;
+  }
+  return undefined;
+}
+
 /**
  * Reconstructs table rows from a PDF's positioned text items (pdfjs-dist gives x/y per
  * item; raw text-dump order otherwise interleaves columns unpredictably). This is the
@@ -162,6 +175,7 @@ async function parsePDF(fileContent: Buffer, password: string | undefined): Prom
 
   const transactions: RawParsedTransaction[] = [];
   const warnings: string[] = [];
+  const allLines: string[] = [];
 
   for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
     const page = await doc.getPage(pageNum);
@@ -192,6 +206,7 @@ async function parsePDF(fileContent: Buffer, password: string | undefined): Prom
         .replace(/\s+/g, ' ')
         .trim();
       if (!line) continue;
+      allLines.push(line);
 
       const parsed = parseHdfcCcLine(line);
       if (parsed) {
@@ -207,6 +222,7 @@ async function parsePDF(fileContent: Buffer, password: string | undefined): Prom
     periodEnd: transactions.at(-1)?.txnDate ?? null,
     transactions,
     warnings,
+    totalAmountDue: extractTotalAmountDueFromLines(allLines),
   };
 }
 

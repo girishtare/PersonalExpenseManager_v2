@@ -133,6 +133,47 @@ function extractLeadingDate(raw: string | undefined): string | undefined {
   return raw?.trim().match(/^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}/)?.[0];
 }
 
+/** First non-empty cell after the one matching `labelRe`, in the same row. */
+function findLabelValueInRow(rows: string[][], labelRe: RegExp): number | undefined {
+  for (const row of rows) {
+    const labelIdx = row.findIndex((cell) => labelRe.test((cell ?? '').trim()));
+    if (labelIdx === -1) continue;
+    for (let i = labelIdx + 1; i < row.length; i++) {
+      const cell = row[i]?.trim();
+      if (cell) return parseAmount(cell) || undefined;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * HDFC's "Account Summary" mini-table prints labels on one row and their values on the row
+ * directly below, at the same column index (verified against a real statement) - e.g. row N
+ * has "Opening Bal" at index 0, row N+1 has "1,34,738.88" at index 0.
+ */
+function findLabelValueBelowRow(rows: string[][], labelRe: RegExp): number | undefined {
+  for (let r = 0; r < rows.length - 1; r++) {
+    const labelIdx = rows[r].findIndex((cell) => labelRe.test((cell ?? '').trim()));
+    if (labelIdx === -1) continue;
+    const valueCell = rows[r + 1][labelIdx]?.trim();
+    if (valueCell) return parseAmount(valueCell) || undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Pulls the statement-level "Total Amount Due" and "Opening Bal" figures out of an HDFC credit
+ * card export, for reconciliation against the sum of parsed transactions (see the CC
+ * Reconciliation page). Both are best-effort - undefined when not found, which the
+ * reconciliation view treats as "not verifiable" rather than a mismatch.
+ */
+export function extractCreditCardStatementTotals(rows: string[][]): { totalAmountDue?: number; openingBalance?: number } {
+  return {
+    totalAmountDue: findLabelValueInRow(rows, /^total amount due$/i),
+    openingBalance: findLabelValueBelowRow(rows, /^opening\s*bal/i),
+  };
+}
+
 /**
  * HDFC credit card statements (Excel/CSV export) use a single Amount column rather than the
  * separate debit/credit columns a savings/current NetBanking export has, a combined
@@ -205,11 +246,15 @@ export function buildCreditCardStatementFromRows(rows: string[][]): ParsedStatem
     });
   }
 
+  const { totalAmountDue, openingBalance } = extractCreditCardStatementTotals(rows);
+
   return {
     periodStart: transactions[0]?.txnDate ?? null,
     periodEnd: transactions.at(-1)?.txnDate ?? null,
     transactions,
     warnings,
+    totalAmountDue,
+    openingBalance,
   };
 }
 

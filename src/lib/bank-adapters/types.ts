@@ -30,6 +30,15 @@ export interface ParsedStatement {
   transactions: RawParsedTransaction[];
   /** Rows that couldn't be confidently parsed - surfaced to the user, never silently dropped. */
   warnings: string[];
+  /**
+   * Credit card statement's own printed "Total Amount Due" - includes any carried-over balance
+   * from prior statements, so it is NOT directly comparable to sum(transactions) for this
+   * statement alone (see opening_balance). Undefined when not applicable/not found - not every
+   * format captures this.
+   */
+  totalAmountDue?: number;
+  /** Balance carried in from the previous statement. Undefined when not found. */
+  openingBalance?: number;
 }
 
 export interface BankStatementParser {
