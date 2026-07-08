@@ -11,6 +11,7 @@ const NAV_LINKS = [
   { href: '/import', label: 'Import' },
   { href: '/transactions', label: 'Transactions' },
   { href: '/categories', label: 'Categories' },
+  { href: '/budget', label: 'Budget' },
   { href: '/reconciliation', label: 'CC Reconciliation' },
 ];
 

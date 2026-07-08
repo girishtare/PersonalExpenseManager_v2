@@ -32,6 +32,6 @@ export async function upsertBudget(categoryId: string, monthlyAmount: number): P
   );
   if (error) return { error: error.message };
 
-  revalidatePath('/dashboard');
+  revalidatePath('/budget');
   return {};
 }

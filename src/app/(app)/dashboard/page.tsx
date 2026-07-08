@@ -6,14 +6,13 @@ import { Card } from '@/components/ui/card';
 import type { TxnType } from '@/lib/transactions/type';
 import { aggregateByCategory, categoryOf, computeSavingsRate, sumByType } from '@/lib/transactions/aggregate';
 import { effectiveTxnType } from '@/lib/transactions/type';
-import { computeMtdBadge, parseDateKey, projectMonthEnd, sameDaysLastMonth, toDateKey, type MtdBadge } from '@/lib/dashboard/period';
+import { computeMtdBadge, parseDateKey, sameDaysLastMonth, toDateKey, type MtdBadge } from '@/lib/dashboard/period';
 import { detectRecurringDebits, type RecurrenceTxn } from '@/lib/dashboard/recurrence';
 import { computeTopMerchants } from '@/lib/dashboard/merchants';
 import { DashboardFilters } from './filters';
 import { MonthlyTrendChart, type MonthlyTrendPoint } from './monthly-trend-chart';
 import { CategoryDonutChart } from './category-donut-chart';
 import { UpcomingDebitsCard } from './upcoming-debits-card';
-import { BudgetCard, type BudgetRow } from './budget-card';
 import { TopMerchantsTable } from './top-merchants-table';
 
 const formatCurrency = (value: number) =>
@@ -104,7 +103,6 @@ export default async function DashboardPage({
   const mtdBadge: MtdBadge | null = computeMtdBadge(start, end);
 
   const twelveMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 11, 1);
-  const monthStart = new Date(end.getFullYear(), end.getMonth(), 1);
 
   const TXN_SELECT = 'amount, txn_type_override, category_id, description_raw, categories(name, txn_type)';
 
@@ -127,41 +125,20 @@ export default async function DashboardPage({
     .eq('direction', 'debit')
     .gte('txn_date', toDateKey(twelveMonthsAgo))
     .lte('txn_date', toDateKey(today));
-  // Budget tracking is scoped to the calendar month containing the selected end date (lets the
-  // user check a past month's budget-vs-actual by picking a range inside it), not the arbitrary
-  // start/end range itself, since a budget is inherently a monthly concept.
-  let monthToDateQuery = supabase
-    .from('transactions')
-    .select('amount, direction, category_id')
-    .gte('txn_date', toDateKey(monthStart))
-    .lte('txn_date', toDateKey(end));
 
   if (accountId) {
     currentQuery = currentQuery.eq('account_id', accountId);
     previousQuery = previousQuery.eq('account_id', accountId);
     trendQuery = trendQuery.eq('account_id', accountId);
     recurrenceQuery = recurrenceQuery.eq('account_id', accountId);
-    monthToDateQuery = monthToDateQuery.eq('account_id', accountId);
   }
 
-  const [
-    { data: accounts },
-    { data: currentRows },
-    { data: previousRows },
-    { data: trendRows },
-    { data: recurrenceRows },
-    { data: monthToDateRows },
-    { data: categoryRows },
-    { data: budgetRows },
-  ] = await Promise.all([
+  const [{ data: accounts }, { data: currentRows }, { data: previousRows }, { data: trendRows }, { data: recurrenceRows }] = await Promise.all([
     supabase.from('accounts').select('id, display_name').eq('user_id', user.id).order('created_at', { ascending: true }),
     currentQuery,
     previousQuery,
     trendQuery,
     recurrenceQuery,
-    monthToDateQuery,
-    supabase.from('categories').select('id, name, txn_type').or(`user_id.eq.${user.id},user_id.is.null`).order('name', { ascending: true }),
-    supabase.from('budgets').select('category_id, monthly_amount, effective_from').eq('user_id', user.id),
   ]);
 
   const current = (currentRows ?? []) as TxnRow[];
@@ -206,38 +183,6 @@ export default async function DashboardPage({
     return !!category && effectiveTxnType(row, category) === 'expense';
   };
   const topMerchants = computeTopMerchants(current.filter(isExpenseRow), previous.filter(isExpenseRow));
-
-  // Resolve the latest budget row per category as of `end` (a budget can change over time via
-  // effective_from - later rows override earlier ones, but never one dated after `end`).
-  const endKey = toDateKey(end);
-  const currentBudgetByCategory = new Map<string, { amount: number; effectiveFrom: string }>();
-  for (const b of budgetRows ?? []) {
-    if (b.effective_from > endKey) continue;
-    const existing = currentBudgetByCategory.get(b.category_id);
-    if (!existing || b.effective_from > existing.effectiveFrom) {
-      currentBudgetByCategory.set(b.category_id, { amount: Number(b.monthly_amount), effectiveFrom: b.effective_from });
-    }
-  }
-
-  const spentByCategory = new Map<string, number>();
-  for (const t of monthToDateRows ?? []) {
-    const signed = t.direction === 'debit' ? Number(t.amount) : -Number(t.amount);
-    spentByCategory.set(t.category_id, (spentByCategory.get(t.category_id) ?? 0) + signed);
-  }
-
-  const budgetTableRows: BudgetRow[] = (categoryRows ?? [])
-    .filter((c) => c.txn_type === 'expense')
-    .map((c) => {
-      const spent = spentByCategory.get(c.id) ?? 0;
-      return {
-        categoryId: c.id,
-        categoryName: c.name,
-        budget: currentBudgetByCategory.get(c.id)?.amount ?? 0,
-        spent,
-        projected: projectMonthEnd(spent, end),
-      };
-    })
-    .sort((a, b) => b.spent - a.spent);
 
   return (
     <main className="flex flex-1 flex-col gap-8 p-8">
@@ -309,17 +254,6 @@ export default async function DashboardPage({
           <CategoryDonutChart data={expenseCategories} />
         </Card>
       </section>
-
-      <Card className="flex flex-col gap-4 p-5">
-        <div>
-          <h2 className="font-medium">Budget vs actual</h2>
-          <p className="text-xs text-muted-foreground">
-            For {end.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })} - projected is a straight-line estimate from
-            spend so far.
-          </p>
-        </div>
-        <BudgetCard rows={budgetTableRows} />
-      </Card>
 
       <Card className="flex flex-col gap-4 p-5">
         <h2 className="font-medium">Top merchants</h2>
