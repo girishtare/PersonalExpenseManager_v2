@@ -4,10 +4,17 @@ import { requireOwnerUser } from '@/lib/auth/dal';
 import { createClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import type { TxnType } from '@/lib/transactions/type';
-import { aggregateByCategory, computeSavingsRate, sumByType } from '@/lib/transactions/aggregate';
+import { aggregateByCategory, categoryOf, computeSavingsRate, sumByType } from '@/lib/transactions/aggregate';
+import { effectiveTxnType } from '@/lib/transactions/type';
+import { computeMtdBadge, parseDateKey, projectMonthEnd, sameDaysLastMonth, toDateKey, type MtdBadge } from '@/lib/dashboard/period';
+import { detectRecurringDebits, type RecurrenceTxn } from '@/lib/dashboard/recurrence';
+import { computeTopMerchants } from '@/lib/dashboard/merchants';
 import { DashboardFilters } from './filters';
 import { MonthlyTrendChart, type MonthlyTrendPoint } from './monthly-trend-chart';
 import { CategoryDonutChart } from './category-donut-chart';
+import { UpcomingDebitsCard } from './upcoming-debits-card';
+import { BudgetCard, type BudgetRow } from './budget-card';
+import { TopMerchantsTable } from './top-merchants-table';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
@@ -16,35 +23,23 @@ function monthLabel(date: Date): string {
   return date.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
 }
 
-// Deliberately local-calendar-date formatting, not toISOString() (which converts to UTC and
-// would roll a local date back a day for any timezone ahead of UTC, e.g. IST).
-function toDateKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function parseDateKey(key: string): Date {
-  const [year, month, day] = key.split('-').map(Number);
-  return new Date(year, month - 1, day);
-}
-
 interface Delta {
   direction: 'up' | 'down' | 'flat';
   label: string;
   isGood: boolean;
 }
 
+const VS_LABEL = 'vs same days last month';
+
 /** Percentage delta - safe for quantities that are always >= 0 (income, expense). */
 function percentDelta(current: number, previous: number, higherIsGood: boolean): Delta | undefined {
   if (previous <= 0) return undefined;
   const pct = ((current - previous) / previous) * 100;
-  if (Math.abs(pct) < 0.5) return { direction: 'flat', label: 'Flat vs previous period', isGood: true };
+  if (Math.abs(pct) < 0.5) return { direction: 'flat', label: `Flat ${VS_LABEL}`, isGood: true };
   const direction: Delta['direction'] = pct > 0 ? 'up' : 'down';
   return {
     direction,
-    label: `${pct > 0 ? '+' : ''}${pct.toFixed(0)}% vs previous period`,
+    label: `${pct > 0 ? '+' : ''}${pct.toFixed(0)}% ${VS_LABEL}`,
     isGood: direction === 'up' ? higherIsGood : !higherIsGood,
   };
 }
@@ -53,11 +48,11 @@ function percentDelta(current: number, previous: number, higherIsGood: boolean):
 function absoluteDelta(current: number, previous: number, hasBaseline: boolean): Delta | undefined {
   if (!hasBaseline) return undefined;
   const diff = current - previous;
-  if (Math.abs(diff) < 1) return { direction: 'flat', label: 'Flat vs previous period', isGood: true };
+  if (Math.abs(diff) < 1) return { direction: 'flat', label: `Flat ${VS_LABEL}`, isGood: true };
   const direction: Delta['direction'] = diff > 0 ? 'up' : 'down';
   return {
     direction,
-    label: `${diff > 0 ? '+' : '-'}${formatCurrency(Math.abs(diff))} vs previous period`,
+    label: `${diff > 0 ? '+' : '-'}${formatCurrency(Math.abs(diff))} ${VS_LABEL}`,
     isGood: direction === 'up',
   };
 }
@@ -66,11 +61,11 @@ function absoluteDelta(current: number, previous: number, hasBaseline: boolean):
 function pointsDelta(current: number, previous: number, hasBaseline: boolean): Delta | undefined {
   if (!hasBaseline) return undefined;
   const diff = current - previous;
-  if (Math.abs(diff) < 0.5) return { direction: 'flat', label: 'Flat vs previous period', isGood: true };
+  if (Math.abs(diff) < 0.5) return { direction: 'flat', label: `Flat ${VS_LABEL}`, isGood: true };
   const direction: Delta['direction'] = diff > 0 ? 'up' : 'down';
   return {
     direction,
-    label: `${diff > 0 ? '+' : ''}${diff.toFixed(0)}pp vs previous period`,
+    label: `${diff > 0 ? '+' : ''}${diff.toFixed(0)}pp ${VS_LABEL}`,
     isGood: direction === 'up',
   };
 }
@@ -79,6 +74,7 @@ export interface TxnRow {
   amount: number;
   txn_type_override: TxnType | null;
   category_id: string;
+  description_raw: string;
   categories: { name: string; txn_type: TxnType }[] | { name: string; txn_type: TxnType } | null;
 }
 
@@ -104,48 +100,73 @@ export default async function DashboardPage({
   const end = params.end ? parseDateKey(params.end) : today;
   const accountId = params.accountId ?? '';
 
-  const rangeDays = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
-  const previousEnd = new Date(start);
-  previousEnd.setDate(previousEnd.getDate() - 1);
-  const previousStart = new Date(previousEnd);
-  previousStart.setDate(previousStart.getDate() - rangeDays + 1);
+  const { start: prevStart, end: prevEnd } = sameDaysLastMonth(start, end);
+  const mtdBadge: MtdBadge | null = computeMtdBadge(start, end);
 
   const twelveMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 11, 1);
+  const monthStart = new Date(end.getFullYear(), end.getMonth(), 1);
 
-  const TXN_SELECT = 'amount, txn_type_override, category_id, categories(name, txn_type)';
+  const TXN_SELECT = 'amount, txn_type_override, category_id, description_raw, categories(name, txn_type)';
 
-  let currentQuery = supabase
-    .from('transactions')
-    .select(TXN_SELECT)
-    .gte('txn_date', toDateKey(start))
-    .lte('txn_date', toDateKey(end));
+  let currentQuery = supabase.from('transactions').select(TXN_SELECT).gte('txn_date', toDateKey(start)).lte('txn_date', toDateKey(end));
   let previousQuery = supabase
     .from('transactions')
     .select(TXN_SELECT)
-    .gte('txn_date', toDateKey(previousStart))
-    .lte('txn_date', toDateKey(previousEnd));
+    .gte('txn_date', toDateKey(prevStart))
+    .lte('txn_date', toDateKey(prevEnd));
   let trendQuery = supabase
     .from('transactions')
     .select('amount, txn_date, txn_type_override, categories(txn_type)')
     .gte('txn_date', toDateKey(twelveMonthsAgo));
+  // Upcoming known debits are always about "what's coming up from now", independent of the
+  // selected viewing range - same convention as the 12-month trend always showing the last 12
+  // real months regardless of the date filter.
+  let recurrenceQuery = supabase
+    .from('transactions')
+    .select('txn_date, amount, direction, description_raw')
+    .eq('direction', 'debit')
+    .gte('txn_date', toDateKey(twelveMonthsAgo))
+    .lte('txn_date', toDateKey(today));
+  // Budget tracking is scoped to the calendar month containing the selected end date (lets the
+  // user check a past month's budget-vs-actual by picking a range inside it), not the arbitrary
+  // start/end range itself, since a budget is inherently a monthly concept.
+  let monthToDateQuery = supabase
+    .from('transactions')
+    .select('amount, direction, category_id')
+    .gte('txn_date', toDateKey(monthStart))
+    .lte('txn_date', toDateKey(end));
 
   if (accountId) {
     currentQuery = currentQuery.eq('account_id', accountId);
     previousQuery = previousQuery.eq('account_id', accountId);
     trendQuery = trendQuery.eq('account_id', accountId);
+    recurrenceQuery = recurrenceQuery.eq('account_id', accountId);
+    monthToDateQuery = monthToDateQuery.eq('account_id', accountId);
   }
 
-  const [{ data: accounts }, { data: currentRows }, { data: previousRows }, { data: trendRows }] = await Promise.all([
+  const [
+    { data: accounts },
+    { data: currentRows },
+    { data: previousRows },
+    { data: trendRows },
+    { data: recurrenceRows },
+    { data: monthToDateRows },
+    { data: categoryRows },
+    { data: budgetRows },
+  ] = await Promise.all([
     supabase.from('accounts').select('id, display_name').eq('user_id', user.id).order('created_at', { ascending: true }),
     currentQuery,
     previousQuery,
     trendQuery,
+    recurrenceQuery,
+    monthToDateQuery,
+    supabase.from('categories').select('id, name, txn_type').or(`user_id.eq.${user.id},user_id.is.null`).order('name', { ascending: true }),
+    supabase.from('budgets').select('category_id, monthly_amount, effective_from').eq('user_id', user.id),
   ]);
 
   const current = (currentRows ?? []) as TxnRow[];
   const previous = (previousRows ?? []) as TxnRow[];
 
-  const incomeCategories = aggregateByCategory(current, 'income');
   const expenseCategories = aggregateByCategory(current, 'expense');
   const totalIncome = sumByType(current, 'income');
   const totalExpense = sumByType(current, 'expense');
@@ -176,6 +197,48 @@ export default async function DashboardPage({
     };
   });
 
+  const upcomingDebits = detectRecurringDebits((recurrenceRows ?? []) as RecurrenceTxn[], today);
+
+  // "Merchants" means places you spend, not internal transfers/bill payments - a CC Bill
+  // Payment would otherwise dominate this table as the single biggest "merchant".
+  const isExpenseRow = (row: TxnRow) => {
+    const category = categoryOf(row);
+    return !!category && effectiveTxnType(row, category) === 'expense';
+  };
+  const topMerchants = computeTopMerchants(current.filter(isExpenseRow), previous.filter(isExpenseRow));
+
+  // Resolve the latest budget row per category as of `end` (a budget can change over time via
+  // effective_from - later rows override earlier ones, but never one dated after `end`).
+  const endKey = toDateKey(end);
+  const currentBudgetByCategory = new Map<string, { amount: number; effectiveFrom: string }>();
+  for (const b of budgetRows ?? []) {
+    if (b.effective_from > endKey) continue;
+    const existing = currentBudgetByCategory.get(b.category_id);
+    if (!existing || b.effective_from > existing.effectiveFrom) {
+      currentBudgetByCategory.set(b.category_id, { amount: Number(b.monthly_amount), effectiveFrom: b.effective_from });
+    }
+  }
+
+  const spentByCategory = new Map<string, number>();
+  for (const t of monthToDateRows ?? []) {
+    const signed = t.direction === 'debit' ? Number(t.amount) : -Number(t.amount);
+    spentByCategory.set(t.category_id, (spentByCategory.get(t.category_id) ?? 0) + signed);
+  }
+
+  const budgetTableRows: BudgetRow[] = (categoryRows ?? [])
+    .filter((c) => c.txn_type === 'expense')
+    .map((c) => {
+      const spent = spentByCategory.get(c.id) ?? 0;
+      return {
+        categoryId: c.id,
+        categoryName: c.name,
+        budget: currentBudgetByCategory.get(c.id)?.amount ?? 0,
+        spent,
+        projected: projectMonthEnd(spent, end),
+      };
+    })
+    .sort((a, b) => b.spent - a.spent);
+
   return (
     <main className="flex flex-1 flex-col gap-8 p-8">
       <div>
@@ -200,6 +263,7 @@ export default async function DashboardPage({
           icon={Wallet}
           accentClass="bg-blue-100 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400"
           delta={percentDelta(totalIncome, prevIncome, true)}
+          mtdBadge={mtdBadge}
         />
         <StatTile
           label="Expense"
@@ -207,6 +271,7 @@ export default async function DashboardPage({
           icon={Receipt}
           accentClass="bg-orange-100 text-orange-600 dark:bg-orange-500/15 dark:text-orange-400"
           delta={percentDelta(totalExpense, prevExpense, false)}
+          mtdBadge={mtdBadge}
         />
         <StatTile
           label="Net savings"
@@ -214,6 +279,7 @@ export default async function DashboardPage({
           icon={PiggyBank}
           accentClass="bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400"
           delta={absoluteDelta(totalIncome - totalExpense, prevIncome - prevExpense, hasPreviousData)}
+          mtdBadge={mtdBadge}
         />
         <StatTile
           label="Savings rate"
@@ -221,6 +287,7 @@ export default async function DashboardPage({
           icon={BarChart3}
           accentClass="bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400"
           delta={savingsRate !== null && prevSavingsRate !== null ? pointsDelta(savingsRate, prevSavingsRate, hasPreviousData) : undefined}
+          mtdBadge={mtdBadge}
         />
         <StatTile
           label="Invested this period"
@@ -228,19 +295,36 @@ export default async function DashboardPage({
           icon={TrendingUp}
           accentClass="bg-cyan-100 text-cyan-600 dark:bg-cyan-500/15 dark:text-cyan-400"
           delta={absoluteDelta(totalInvestment, prevInvestment, hasPreviousData)}
+          mtdBadge={mtdBadge}
         />
       </section>
 
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card className="flex flex-col gap-4 p-5">
-          <h2 className="font-medium">Income by category</h2>
-          <CategoryDonutChart data={incomeCategories} />
+          <h2 className="font-medium">Upcoming known debits</h2>
+          <UpcomingDebitsCard debits={upcomingDebits} />
         </Card>
         <Card className="flex flex-col gap-4 p-5">
           <h2 className="font-medium">Expense by category</h2>
           <CategoryDonutChart data={expenseCategories} />
         </Card>
       </section>
+
+      <Card className="flex flex-col gap-4 p-5">
+        <div>
+          <h2 className="font-medium">Budget vs actual</h2>
+          <p className="text-xs text-muted-foreground">
+            For {end.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })} - projected is a straight-line estimate from
+            spend so far.
+          </p>
+        </div>
+        <BudgetCard rows={budgetTableRows} />
+      </Card>
+
+      <Card className="flex flex-col gap-4 p-5">
+        <h2 className="font-medium">Top merchants</h2>
+        <TopMerchantsTable rows={topMerchants} />
+      </Card>
 
       <Card className="flex flex-col gap-4 p-5">
         <div className="flex items-center gap-2">
@@ -259,12 +343,14 @@ function StatTile({
   icon: Icon,
   accentClass,
   delta,
+  mtdBadge,
 }: {
   label: string;
   value: string;
   icon: LucideIcon;
   accentClass: string;
   delta?: Delta;
+  mtdBadge: MtdBadge | null;
 }) {
   const deltaColorClass = delta
     ? delta.direction === 'flat'
@@ -276,11 +362,18 @@ function StatTile({
 
   return (
     <Card className="flex flex-col gap-3 p-5">
-      <div className="flex items-center gap-3">
-        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${accentClass}`}>
-          <Icon className="h-[18px] w-[18px]" />
-        </span>
-        <p className="text-sm text-muted-foreground">{label}</p>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-3">
+          <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${accentClass}`}>
+            <Icon className="h-[18px] w-[18px]" />
+          </span>
+          <p className="text-sm text-muted-foreground">{label}</p>
+        </div>
+        {mtdBadge && (
+          <span className="whitespace-nowrap rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+            MTD &middot; day {mtdBadge.day} of {mtdBadge.totalDays}
+          </span>
+        )}
       </div>
       <p className="text-3xl font-semibold tracking-tight">{value}</p>
       {delta && (

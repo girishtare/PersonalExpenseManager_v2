@@ -9,16 +9,26 @@ export interface CategoryAmount {
   amount: number;
 }
 
+const OTHER_THRESHOLD = 0.03;
+// Palette ceiling (chart-colors.ts has 8 categorical hues) - a pure %-cutoff alone could still
+// leave more than 8 "real" slices in a period with many similarly-sized categories, which would
+// wrap and reuse colors. Both constraints apply together: fold anything under 3%, and cap the
+// rest at 7 (plus "Other") so colors never repeat.
 const MAX_SLICES = 7;
 
-/** Past the token ceiling (7-8 series), fold the tail into "Other" rather than adding more hues. */
+/** Slices under 3% of the total, or past the 7-slice ceiling, are folded into "Other". */
 function foldTopCategories(items: CategoryAmount[]): CategoryAmount[] {
   const sorted = [...items].sort((a, b) => b.amount - a.amount);
-  if (sorted.length <= MAX_SLICES) return sorted;
+  const total = sorted.reduce((sum, item) => sum + item.amount, 0);
+  if (total <= 0) return sorted;
 
-  const top = sorted.slice(0, MAX_SLICES);
-  const otherTotal = sorted.slice(MAX_SLICES).reduce((sum, item) => sum + item.amount, 0);
-  return otherTotal > 0 ? [...top, { name: 'Other', amount: otherTotal }] : top;
+  const kept: CategoryAmount[] = [];
+  let otherTotal = 0;
+  for (const item of sorted) {
+    if (item.amount / total < OTHER_THRESHOLD || kept.length >= MAX_SLICES) otherTotal += item.amount;
+    else kept.push(item);
+  }
+  return otherTotal > 0 ? [...kept, { name: 'Other', amount: otherTotal }] : kept;
 }
 
 const formatAmount = (value: unknown) =>
@@ -44,7 +54,7 @@ export function CategoryDonutChart({ data }: { data: CategoryAmount[] }) {
           outerRadius="85%"
           paddingAngle={2}
           strokeWidth={0}
-          label={({ percent }) => ((percent ?? 0) >= 0.06 ? `${Math.round((percent ?? 0) * 100)}%` : '')}
+          label={({ percent }) => `${Math.round((percent ?? 0) * 100)}%`}
           labelLine={false}
         >
           {rows.map((row, i) => (
