@@ -18,14 +18,14 @@ export function BudgetTable({ rows }: { rows: BudgetRow[] }) {
   }
 
   return (
-    <div className="max-h-[70vh] overflow-auto">
+    <div className="max-h-[70vh] overflow-auto pr-2" style={{ scrollbarGutter: 'stable' }}>
       <table className="w-full min-w-[560px] text-sm">
         <thead className="sticky top-0 z-10 bg-card">
           <tr className="border-b border-border text-left text-xs text-muted-foreground">
             <th className="py-2 font-medium">Category</th>
             <th className="py-2 text-right font-medium">Spent</th>
             <th className="py-2 text-right font-medium">Projected</th>
-            <th className="py-2 text-right font-medium">Budget</th>
+            <th className="py-2 pr-1 text-right font-medium">Budget</th>
           </tr>
         </thead>
         <tbody>
@@ -39,7 +39,7 @@ export function BudgetTable({ rows }: { rows: BudgetRow[] }) {
                   {formatCurrency(row.projected)}
                   {isOverrun && ' – over budget'}
                 </td>
-                <td className="py-2">
+                <td className="py-2 pr-1">
                   <BudgetCell categoryId={row.categoryId} amount={row.budget} />
                 </td>
               </tr>
