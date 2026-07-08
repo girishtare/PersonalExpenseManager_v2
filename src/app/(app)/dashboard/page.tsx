@@ -3,10 +3,11 @@ import type { LucideIcon } from 'lucide-react';
 import { requireOwnerUser } from '@/lib/auth/dal';
 import { createClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
-import { effectiveTxnType, type TxnType } from '@/lib/transactions/type';
+import type { TxnType } from '@/lib/transactions/type';
+import { aggregateByCategory, computeSavingsRate, sumByType } from '@/lib/transactions/aggregate';
 import { DashboardFilters } from './filters';
 import { MonthlyTrendChart, type MonthlyTrendPoint } from './monthly-trend-chart';
-import { CategoryDonutChart, type CategoryAmount } from './category-donut-chart';
+import { CategoryDonutChart } from './category-donut-chart';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
@@ -74,7 +75,7 @@ function pointsDelta(current: number, previous: number, hasBaseline: boolean): D
   };
 }
 
-interface TxnRow {
+export interface TxnRow {
   amount: number;
   txn_type_override: TxnType | null;
   category_id: string;
@@ -86,46 +87,6 @@ interface TrendTxnRow {
   txn_date: string;
   txn_type_override: TxnType | null;
   categories: { txn_type: TxnType }[] | { txn_type: TxnType } | null;
-}
-
-function categoryOf<C>(row: { categories: C[] | C | null }): C | null {
-  const c = row.categories;
-  if (!c) return null;
-  return Array.isArray(c) ? (c[0] ?? null) : c;
-}
-
-/**
- * Sums rows by effective type (income/expense/transfer/investment) rather than raw
- * debit/credit direction - transfers (e.g. CC bill payments, own-account moves) and
- * investments are never counted as real income or expense. See effectiveTxnType.
- */
-function sumByType(rows: TxnRow[], type: TxnType): number {
-  return rows.reduce((sum, row) => {
-    const category = categoryOf(row);
-    if (!category || effectiveTxnType(row, category) !== type) return sum;
-    return sum + Number(row.amount);
-  }, 0);
-}
-
-function aggregateByCategory(rows: TxnRow[], type: 'income' | 'expense'): CategoryAmount[] {
-  const totals = new Map<string, number>();
-  for (const row of rows) {
-    const category = categoryOf(row);
-    if (!category || effectiveTxnType(row, category) !== type) continue;
-    totals.set(category.name, (totals.get(category.name) ?? 0) + Number(row.amount));
-  }
-  return Array.from(totals.entries()).map(([name, amount]) => ({ name, amount }));
-}
-
-/**
- * N/A when there's no income to divide by, or when income is dwarfed by expense (more than
- * 5x) - a partial-period guard so a mid-cycle view (bills already paid, salary not yet
- * credited) never renders an absurd rate like -6733%.
- */
-function computeSavingsRate(income: number, expense: number): number | null {
-  if (income <= 0) return null;
-  if (expense > income * 5) return null;
-  return ((income - expense) / income) * 100;
 }
 
 export default async function DashboardPage({
@@ -206,20 +167,12 @@ export default async function DashboardPage({
 
   const trendRowsTyped = (trendRows ?? []) as TrendTxnRow[];
 
-  function sumTrendByType(rows: TrendTxnRow[], type: TxnType): number {
-    return rows.reduce((sum, row) => {
-      const category = categoryOf(row);
-      if (!category || effectiveTxnType(row, category) !== type) return sum;
-      return sum + Number(row.amount);
-    }, 0);
-  }
-
   const trendData: MonthlyTrendPoint[] = monthBuckets.map((bucket) => {
     const rowsInMonth = trendRowsTyped.filter((r) => r.txn_date >= bucket.startKey && r.txn_date <= bucket.endKey);
     return {
       month: bucket.label,
-      income: sumTrendByType(rowsInMonth, 'income'),
-      expense: sumTrendByType(rowsInMonth, 'expense'),
+      income: sumByType(rowsInMonth, 'income'),
+      expense: sumByType(rowsInMonth, 'expense'),
     };
   });
 
