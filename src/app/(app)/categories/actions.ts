@@ -5,7 +5,6 @@ import { revalidatePath } from 'next/cache';
 import { requireOwnerUser } from '@/lib/auth/dal';
 import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service';
-import { categorizeTransaction, getUncategorizedCategoryId, loadActiveRules } from '@/lib/categorization/engine';
 
 // The import pipeline finds its fallback bucket by name (see getUncategorizedCategoryId) -
 // renaming or deleting it would silently break every future statement import.
@@ -173,36 +172,4 @@ export async function deleteRule(ruleId: string) {
   // RLS also scopes deletes to user_id = auth.uid(), so this is a no-op against system rules.
   await supabase.from('categorization_rules').delete().eq('id', ruleId).eq('user_id', user.id);
   revalidatePath('/categories');
-}
-
-export async function recalculateCategories(): Promise<{ updatedCount: number } | { error: string }> {
-  const user = await requireOwnerUser();
-  const supabase = await createClient();
-
-  const rules = await loadActiveRules(supabase, user.id);
-  const uncategorizedId = await getUncategorizedCategoryId(supabase);
-
-  const { data: transactions, error } = await supabase
-    .from('transactions')
-    .select('id, description_raw, direction')
-    .eq('user_id', user.id)
-    .eq('is_manual_override', false);
-
-  if (error || !transactions) {
-    return { error: error?.message ?? 'Could not load transactions' };
-  }
-
-  let updatedCount = 0;
-  for (const txn of transactions) {
-    const { categoryId, ruleId } = categorizeTransaction(txn.description_raw, txn.direction, rules, uncategorizedId);
-    const { error: updateError } = await supabase
-      .from('transactions')
-      .update({ category_id: categoryId, categorization_rule_id: ruleId })
-      .eq('id', txn.id);
-    if (!updateError) updatedCount++;
-  }
-
-  revalidatePath('/transactions');
-  revalidatePath('/dashboard');
-  return { updatedCount };
 }
