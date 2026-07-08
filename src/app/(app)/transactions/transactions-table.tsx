@@ -1,6 +1,21 @@
+'use client';
+
+import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { bulkUpdateTransactionCategory } from './actions';
 import { CategoryPicker } from './category-picker';
 
 interface Category {
@@ -72,12 +87,104 @@ export function TransactionsTable({
   sortDir: 'asc' | 'desc';
   searchQuery: string;
 }) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Selection is scoped to the rows currently on screen - reset it whenever the page's
+  // transaction set changes (new page, new filters, a category update revalidating the list)
+  // rather than in an effect, per React's guidance for adjusting state from props.
+  const [prevIds, setPrevIds] = useState(() => transactions.map((t) => t.id).join(','));
+  const currentIds = transactions.map((t) => t.id).join(',');
+  if (currentIds !== prevIds) {
+    setPrevIds(currentIds);
+    setSelected(new Set());
+  }
+
+  const [bulkCategoryId, setBulkCategoryId] = useState<string | undefined>(undefined);
+  const [applying, startApplying] = useTransition();
+
+  const allSelected = transactions.length > 0 && transactions.every((t) => selected.has(t.id));
+  const someSelected = selected.size > 0 && !allSelected;
+
+  function toggleSelected(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   return (
     <div className="flex flex-col gap-4">
+      {selected.size > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/40 p-3">
+          <span className="text-sm font-medium">{selected.size} selected</span>
+          <Select
+            items={categories.map((c) => ({ value: c.id, label: c.name }))}
+            value={bulkCategoryId}
+            onValueChange={(v) => setBulkCategoryId(v ?? undefined)}
+          >
+            <SelectTrigger size="sm" className="w-56">
+              <SelectValue placeholder="Choose category..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectLabel>Income</SelectLabel>
+                {categories
+                  .filter((c) => c.type === 'income')
+                  .map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+              </SelectGroup>
+              <SelectGroup>
+                <SelectLabel>Expense</SelectLabel>
+                {categories
+                  .filter((c) => c.type === 'expense')
+                  .map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <Button
+            type="button"
+            size="sm"
+            disabled={!bulkCategoryId || applying}
+            onClick={() =>
+              startApplying(async () => {
+                if (!bulkCategoryId) return;
+                await bulkUpdateTransactionCategory([...selected], bulkCategoryId);
+                setSelected(new Set());
+                setBulkCategoryId(undefined);
+              })
+            }
+          >
+            Apply to {selected.size}
+          </Button>
+          <Button type="button" size="sm" variant="ghost" disabled={applying} onClick={() => setSelected(new Set())}>
+            Clear
+          </Button>
+          <span className="text-xs text-muted-foreground">Only affects the rows on this page.</span>
+        </div>
+      )}
+
       {transactions.length ? (
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-8">
+                <Checkbox
+                  checked={allSelected}
+                  indeterminate={someSelected}
+                  onCheckedChange={(checked) =>
+                    setSelected(checked ? new Set(transactions.map((t) => t.id)) : new Set())
+                  }
+                  aria-label="Select all rows on this page"
+                />
+              </TableHead>
               <TableHead>
                 <SortHeader column="txn_date" sortKey={sortKey} sortDir={sortDir} searchQuery={searchQuery}>
                   Date
@@ -100,6 +207,13 @@ export function TransactionsTable({
           <TableBody>
             {transactions.map((txn) => (
               <TableRow key={txn.id}>
+                <TableCell>
+                  <Checkbox
+                    checked={selected.has(txn.id)}
+                    onCheckedChange={() => toggleSelected(txn.id)}
+                    aria-label={`Select transaction ${txn.description_raw}`}
+                  />
+                </TableCell>
                 <TableCell>{txn.txn_date}</TableCell>
                 <TableCell className="max-w-xs truncate whitespace-normal">{txn.description_raw}</TableCell>
                 <TableCell>{txn.account_name}</TableCell>
