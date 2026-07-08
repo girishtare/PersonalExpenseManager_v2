@@ -3,8 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { AddCategoryForm } from './add-category-form';
 import { AddRuleForm } from './add-rule-form';
-import { CategoryBadge } from './category-badge';
-import { CategoryTypeSelect } from './category-type-select';
+import { CategoriesTable } from './categories-table';
 import { RecalculateButton } from './recalculate-button';
 import { RulesTable } from './rules-table';
 
@@ -53,28 +52,14 @@ export default async function CategoriesPage() {
           Click a category name to rename or delete it. Type controls which transactions in it auto-pick-up as
           income/expense/transfer/investment on the dashboard.
         </p>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div>
             <p className="mb-1 text-sm text-muted-foreground">Income</p>
-            <div className="flex flex-wrap gap-2">
-              {incomeCategories.map((c) => (
-                <div key={c.id} className="inline-flex items-center gap-1">
-                  <CategoryBadge category={c} />
-                  <CategoryTypeSelect categoryId={c.id} txnType={c.txn_type} />
-                </div>
-              ))}
-            </div>
+            <CategoriesTable categories={incomeCategories} />
           </div>
           <div>
             <p className="mb-1 text-sm text-muted-foreground">Expense</p>
-            <div className="flex flex-wrap gap-2">
-              {expenseCategories.map((c) => (
-                <div key={c.id} className="inline-flex items-center gap-1">
-                  <CategoryBadge category={c} />
-                  <CategoryTypeSelect categoryId={c.id} txnType={c.txn_type} />
-                </div>
-              ))}
-            </div>
+            <CategoriesTable categories={expenseCategories} />
           </div>
         </div>
       </Card>

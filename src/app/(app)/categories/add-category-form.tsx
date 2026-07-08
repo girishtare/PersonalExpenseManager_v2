@@ -9,6 +9,8 @@ import { createCategory, type AddCategoryState } from './actions';
 
 const initialState: AddCategoryState = {};
 
+const TXN_TYPE_LABELS = { expense: 'Expense', income: 'Income', transfer: 'Transfer', investment: 'Investment' };
+
 export function AddCategoryForm() {
   const [state, formAction, pending] = useActionState(createCategory, initialState);
 
@@ -19,14 +21,29 @@ export function AddCategoryForm() {
         <Input id="category-name" name="name" required placeholder="e.g. Rent" />
       </div>
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="category-type">Type</Label>
+        <Label htmlFor="category-class">Class</Label>
         <Select name="type" items={{ income: 'Income', expense: 'Expense' }} defaultValue="expense">
-          <SelectTrigger id="category-type" className="w-36">
+          <SelectTrigger id="category-class" className="w-32">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="income">Income</SelectItem>
             <SelectItem value="expense">Expense</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="category-txn-type">Type</Label>
+        <Select name="txnType" items={TXN_TYPE_LABELS} defaultValue="expense">
+          <SelectTrigger id="category-txn-type" className="w-36">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.entries(TXN_TYPE_LABELS) as [string, string][]).map(([v, label]) => (
+              <SelectItem key={v} value={v}>
+                {label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>

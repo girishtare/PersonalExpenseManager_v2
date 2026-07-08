@@ -16,6 +16,7 @@ const UNCATEGORIZED_NAME_RE = /^uncategori[sz]ed$/i;
 const AddCategorySchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(60),
   type: z.enum(['income', 'expense']),
+  txnType: z.enum(['expense', 'income', 'transfer', 'investment']),
 });
 
 export interface AddCategoryState {
@@ -30,6 +31,7 @@ export async function createCategory(
   const parsed = AddCategorySchema.safeParse({
     name: formData.get('name'),
     type: formData.get('type'),
+    txnType: formData.get('txnType'),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input' };
@@ -40,6 +42,7 @@ export async function createCategory(
     user_id: user.id,
     name: parsed.data.name,
     type: parsed.data.type,
+    txn_type: parsed.data.txnType,
   });
   if (error) return { error: error.message };
 
