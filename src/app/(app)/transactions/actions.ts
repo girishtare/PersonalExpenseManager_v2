@@ -4,6 +4,27 @@ import { revalidatePath } from 'next/cache';
 import { requireOwnerUser } from '@/lib/auth/dal';
 import { createClient } from '@/lib/supabase/server';
 import { reduceDescription } from '@/lib/transactions/similar';
+import type { TxnType } from '@/lib/transactions/type';
+
+const TXN_TYPES: TxnType[] = ['expense', 'income', 'transfer', 'investment'];
+
+/** Sets or clears (null = "use the category's default") this transaction's txn_type_override. */
+export async function updateTransactionTxnTypeOverride(transactionId: string, txnType: TxnType | null) {
+  const user = await requireOwnerUser();
+  if (txnType !== null && !TXN_TYPES.includes(txnType)) throw new Error('Invalid transaction type.');
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('transactions')
+    .update({ txn_type_override: txnType })
+    .eq('id', transactionId)
+    .eq('user_id', user.id);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath('/transactions');
+  revalidatePath('/dashboard');
+}
 
 export async function updateTransactionCategory(transactionId: string, categoryId: string) {
   const user = await requireOwnerUser();

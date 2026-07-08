@@ -1,6 +1,7 @@
 import { requireOwnerUser } from '@/lib/auth/dal';
 import { createClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
+import type { TxnType } from '@/lib/transactions/type';
 import { TransactionsFilters } from './filters';
 import { TransactionsPagination } from './pagination';
 import { TransactionsTable, type TransactionRow } from './transactions-table';
@@ -45,9 +46,10 @@ export default async function TransactionsPage({
 
   let query = supabase
     .from('transactions')
-    .select('id, txn_date, description_raw, amount, direction, category_id, account_id, accounts(display_name)', {
-      count: 'exact',
-    })
+    .select(
+      'id, txn_date, description_raw, amount, direction, category_id, account_id, accounts(display_name), txn_type_override, categories(txn_type)',
+      { count: 'exact' }
+    )
     .eq('user_id', user.id);
 
   if (start) query = query.gte('txn_date', start);
@@ -83,6 +85,8 @@ export default async function TransactionsPage({
     category_id: t.category_id,
     account_id: t.account_id,
     account_name: (t.accounts as unknown as { display_name: string } | null)?.display_name ?? '',
+    txn_type_override: t.txn_type_override,
+    category_txn_type: (t.categories as unknown as { txn_type: TxnType } | null)?.txn_type ?? 'expense',
   }));
 
   const totalCount = count ?? 0;

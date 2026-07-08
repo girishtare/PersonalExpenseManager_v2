@@ -14,7 +14,7 @@ export default async function CategoriesPage() {
   const [{ data: categories }, { data: rules }] = await Promise.all([
     supabase
       .from('categories')
-      .select('id, name, type, user_id')
+      .select('id, name, type, user_id, txn_type')
       .or(`user_id.eq.${user.id},user_id.is.null`)
       .order('type', { ascending: true })
       .order('name', { ascending: true }),

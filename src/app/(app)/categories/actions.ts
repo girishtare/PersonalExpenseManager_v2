@@ -5,6 +5,9 @@ import { revalidatePath } from 'next/cache';
 import { requireOwnerUser } from '@/lib/auth/dal';
 import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service';
+import type { TxnType } from '@/lib/transactions/type';
+
+const TXN_TYPES: TxnType[] = ['expense', 'income', 'transfer', 'investment'];
 
 // The import pipeline finds its fallback bucket by name (see getUncategorizedCategoryId) -
 // renaming or deleting it would silently break every future statement import.
@@ -67,6 +70,26 @@ export async function updateCategory(categoryId: string, name: string): Promise<
   // the single allowed owner.
   const client = category.user_id ? supabase : createServiceClient();
   const { error } = await client.from('categories').update({ name: trimmed }).eq('id', categoryId);
+  if (error) return { error: error.message };
+
+  revalidatePath('/categories');
+  revalidatePath('/transactions');
+  revalidatePath('/dashboard');
+  return {};
+}
+
+export async function updateCategoryTxnType(categoryId: string, txnType: TxnType): Promise<CategoryActionState> {
+  await requireOwnerUser();
+  if (!TXN_TYPES.includes(txnType)) return { error: 'Invalid transaction type.' };
+
+  const supabase = await createClient();
+  const { data: category } = await supabase.from('categories').select('user_id').eq('id', categoryId).maybeSingle();
+  if (!category) return { error: 'Category not found.' };
+
+  // Same service-role-for-system-rows pattern as updateCategory - safe here since
+  // requireOwnerUser() already gated this call to the single allowed owner.
+  const client = category.user_id ? supabase : createServiceClient();
+  const { error } = await client.from('categories').update({ txn_type: txnType }).eq('id', categoryId);
   if (error) return { error: error.message };
 
   revalidatePath('/categories');

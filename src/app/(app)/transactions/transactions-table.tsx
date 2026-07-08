@@ -15,8 +15,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import type { TxnType } from '@/lib/transactions/type';
 import { bulkUpdateTransactionCategory } from './actions';
 import { CategoryPicker } from './category-picker';
+import { TxnTypePicker } from './txn-type-picker';
 
 interface Category {
   id: string;
@@ -33,6 +35,8 @@ export interface TransactionRow {
   category_id: string;
   account_id: string;
   account_name: string;
+  txn_type_override: TxnType | null;
+  category_txn_type: TxnType;
 }
 
 type SortColumn = 'txn_date' | 'description_raw' | 'amount';
@@ -202,6 +206,7 @@ export function TransactionsTable({
                 </SortHeader>
               </TableHead>
               <TableHead>Category</TableHead>
+              <TableHead>Type</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -225,6 +230,13 @@ export function TransactionsTable({
                 </TableCell>
                 <TableCell>
                   <CategoryPicker transactionId={txn.id} categoryId={txn.category_id} categories={categories} />
+                </TableCell>
+                <TableCell>
+                  <TxnTypePicker
+                    transactionId={txn.id}
+                    txnTypeOverride={txn.txn_type_override}
+                    categoryTxnType={txn.category_txn_type}
+                  />
                 </TableCell>
               </TableRow>
             ))}
