@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card';
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { parseDateKey, projectMonthEnd, toDateKey } from '@/lib/dashboard/period';
-import { BudgetCard, type BudgetRow } from './budget-card';
+import { BudgetTable, type BudgetRow } from './budget-table';
 
 const MONTH_KEY_RE = /^\d{4}-\d{2}$/;
 
@@ -108,7 +108,7 @@ export default async function BudgetPage({ searchParams }: { searchParams: Promi
       </div>
 
       <Card className="flex flex-col gap-4 p-5">
-        <BudgetCard rows={budgetTableRows} />
+        <BudgetTable rows={budgetTableRows} />
       </Card>
     </main>
   );
