@@ -18,9 +18,9 @@ export function BudgetTable({ rows }: { rows: BudgetRow[] }) {
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div className="max-h-[70vh] overflow-auto">
       <table className="w-full min-w-[560px] text-sm">
-        <thead>
+        <thead className="sticky top-0 z-10 bg-card">
           <tr className="border-b border-border text-left text-xs text-muted-foreground">
             <th className="py-2 font-medium">Category</th>
             <th className="py-2 text-right font-medium">Spent</th>
