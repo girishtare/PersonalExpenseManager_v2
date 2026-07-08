@@ -57,29 +57,50 @@ export async function POST(request: Request) {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const statementId = crypto.randomUUID();
+
+  // Re-uploading the same statement (e.g. to pick up a parser improvement) must reuse the
+  // existing row rather than insert a new one - otherwise the new row's transactions all dedupe
+  // away against the original import and it's left permanently orphaned (no linked
+  // transactions), which corrupts anything that reads statement-level totals, like CC
+  // Reconciliation.
+  const { data: existingStatement } = await supabase
+    .from('statements')
+    .select('id')
+    .eq('account_id', account.id)
+    .eq('user_id', user.id)
+    .eq('file_name', file.name)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const statementId = existingStatement?.id ?? crypto.randomUUID();
   const storagePath = `${user.id}/${statementId}/${file.name}`;
 
   const { error: uploadError } = await supabase.storage.from('statements').upload(storagePath, buffer, {
     contentType: file.type || undefined,
+    upsert: true,
   });
   if (uploadError) {
     return NextResponse.json({ error: `Could not store file: ${uploadError.message}` }, { status: 500 });
   }
 
-  const { error: insertStatementError } = await supabase.from('statements').insert({
-    id: statementId,
-    account_id: account.id,
-    user_id: user.id,
-    file_name: file.name,
-    storage_path: storagePath,
-    source_format: sourceFormat,
-    parse_status: 'processing',
-    password_protected: typeof password === 'string' && password.length > 0,
-  });
-  if (insertStatementError) {
+  const { error: upsertStatementError } = await supabase.from('statements').upsert(
+    {
+      id: statementId,
+      account_id: account.id,
+      user_id: user.id,
+      file_name: file.name,
+      storage_path: storagePath,
+      source_format: sourceFormat,
+      parse_status: 'processing',
+      parse_error: null,
+      password_protected: typeof password === 'string' && password.length > 0,
+    },
+    { onConflict: 'id' }
+  );
+  if (upsertStatementError) {
     return NextResponse.json(
-      { error: `Could not create statement record: ${insertStatementError.message}` },
+      { error: `Could not create statement record: ${upsertStatementError.message}` },
       { status: 500 }
     );
   }
