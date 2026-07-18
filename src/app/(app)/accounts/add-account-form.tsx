@@ -40,7 +40,6 @@ export function AddAccountForm({ account }: { account?: Account }) {
                 <SelectItem value="HDFC">HDFC Bank</SelectItem>
               </SelectContent>
             </Select>
-            <span className="text-xs text-muted-foreground">More banks coming later.</span>
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -91,6 +90,7 @@ export function AddAccountForm({ account }: { account?: Account }) {
           </div>
         </div>
 
+        <span className="text-xs text-muted-foreground">More banks coming later.</span>
         {state?.error && <p className="text-sm text-destructive">{state.error}</p>}
       </Card>
     </form>
