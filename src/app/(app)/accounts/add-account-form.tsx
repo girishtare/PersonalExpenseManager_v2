@@ -30,10 +30,10 @@ export function AddAccountForm({ account }: { account?: Account }) {
         {account && <input type="hidden" name="id" value={account.id} />}
 
         <div className="flex flex-wrap items-end gap-3">
-          <div className="flex flex-col gap-1.5">
+          <div className="flex min-w-[120px] flex-1 flex-col gap-1.5">
             <Label>Bank</Label>
             <Select items={{ HDFC: 'HDFC Bank' }} defaultValue="HDFC" disabled>
-              <SelectTrigger className="w-36">
+              <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -42,7 +42,7 @@ export function AddAccountForm({ account }: { account?: Account }) {
             </Select>
           </div>
 
-          <div className="flex flex-col gap-1.5">
+          <div className="flex min-w-[140px] flex-1 flex-col gap-1.5">
             <Label htmlFor="accountType">Account type</Label>
             <Select
               name="accountType"
@@ -50,7 +50,7 @@ export function AddAccountForm({ account }: { account?: Account }) {
               defaultValue={account?.account_type ?? 'savings'}
               required
             >
-              <SelectTrigger id="accountType" className="w-36">
+              <SelectTrigger id="accountType" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -61,7 +61,7 @@ export function AddAccountForm({ account }: { account?: Account }) {
             </Select>
           </div>
 
-          <div className="flex flex-col gap-1.5">
+          <div className="flex min-w-[200px] flex-[2] flex-col gap-1.5">
             <Label htmlFor="displayName">Name</Label>
             <Input
               id="displayName"
@@ -69,16 +69,16 @@ export function AddAccountForm({ account }: { account?: Account }) {
               required
               defaultValue={account?.display_name}
               placeholder="e.g. HDFC Salary Account"
-              className="w-56"
+              className="w-full"
             />
           </div>
 
-          <div className="flex flex-col gap-1.5">
+          <div className="flex min-w-[100px] flex-1 flex-col gap-1.5">
             <Label htmlFor="last4">Last 4 digits (optional)</Label>
-            <Input id="last4" name="last4" maxLength={4} defaultValue={account?.last4 ?? ''} placeholder="1234" className="w-28" />
+            <Input id="last4" name="last4" maxLength={4} defaultValue={account?.last4 ?? ''} placeholder="1234" className="w-full" />
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-3">
             <Button type="submit" disabled={pending}>
               {pending ? 'Saving…' : account ? 'Save changes' : 'Add account'}
             </Button>
