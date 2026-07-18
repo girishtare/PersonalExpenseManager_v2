@@ -133,13 +133,17 @@ export default async function DashboardPage({
     recurrenceQuery = recurrenceQuery.eq('account_id', accountId);
   }
 
-  const [{ data: accounts }, { data: currentRows }, { data: previousRows }, { data: trendRows }, { data: recurrenceRows }] = await Promise.all([
-    supabase.from('accounts').select('id, display_name').eq('user_id', user.id).order('created_at', { ascending: true }),
-    currentQuery,
-    previousQuery,
-    trendQuery,
-    recurrenceQuery,
-  ]);
+  const [{ data: accounts }, { data: currentRows }, { data: previousRows }, { data: trendRows }, { data: recurrenceRows }, { data: merchantAliases }] =
+    await Promise.all([
+      supabase.from('accounts').select('id, display_name').eq('user_id', user.id).order('created_at', { ascending: true }),
+      currentQuery,
+      previousQuery,
+      trendQuery,
+      recurrenceQuery,
+      supabase.from('merchant_aliases').select('merchant_key, display_name').eq('user_id', user.id),
+    ]);
+
+  const merchantAliasByKey = new Map((merchantAliases ?? []).map((a) => [a.merchant_key, a.display_name]));
 
   const current = (currentRows ?? []) as TxnRow[];
   const previous = (previousRows ?? []) as TxnRow[];
@@ -182,7 +186,10 @@ export default async function DashboardPage({
     const category = categoryOf(row);
     return !!category && effectiveTxnType(row, category) === 'expense';
   };
-  const topMerchants = computeTopMerchants(current.filter(isExpenseRow), previous.filter(isExpenseRow));
+  const topMerchants = computeTopMerchants(current.filter(isExpenseRow), previous.filter(isExpenseRow)).map((row) => ({
+    ...row,
+    name: merchantAliasByKey.get(row.key) ?? row.name,
+  }));
 
   return (
     <main className="flex flex-1 flex-col gap-8 p-8">

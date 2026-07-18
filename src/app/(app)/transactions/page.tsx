@@ -2,6 +2,7 @@ import { requireOwnerUser } from '@/lib/auth/dal';
 import { createClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import type { TxnType } from '@/lib/transactions/type';
+import { reduceDescription } from '@/lib/transactions/similar';
 import { TransactionsFilters } from './filters';
 import { TransactionsPagination } from './pagination';
 import { TransactionsTable, type TransactionRow } from './transactions-table';
@@ -66,7 +67,7 @@ export default async function TransactionsPage({
   const offset = (page - 1) * PAGE_SIZE;
   query = query.range(offset, offset + PAGE_SIZE - 1);
 
-  const [{ data: transactions, count }, { data: categories }, { data: accounts }] = await Promise.all([
+  const [{ data: transactions, count }, { data: categories }, { data: accounts }, { data: merchantAliases }] = await Promise.all([
     query,
     supabase
       .from('categories')
@@ -74,20 +75,28 @@ export default async function TransactionsPage({
       .or(`user_id.eq.${user.id},user_id.is.null`)
       .order('name', { ascending: true }),
     supabase.from('accounts').select('id, display_name').eq('user_id', user.id).order('created_at', { ascending: true }),
+    supabase.from('merchant_aliases').select('merchant_key, display_name').eq('user_id', user.id),
   ]);
 
-  const rows: TransactionRow[] = (transactions ?? []).map((t) => ({
-    id: t.id,
-    txn_date: t.txn_date,
-    description_raw: t.description_raw,
-    amount: Number(t.amount),
-    direction: t.direction,
-    category_id: t.category_id,
-    account_id: t.account_id,
-    account_name: (t.accounts as unknown as { display_name: string } | null)?.display_name ?? '',
-    txn_type_override: t.txn_type_override,
-    category_txn_type: (t.categories as unknown as { txn_type: TxnType } | null)?.txn_type ?? 'expense',
-  }));
+  const aliasByKey = new Map((merchantAliases ?? []).map((a) => [a.merchant_key, a.display_name]));
+
+  const rows: TransactionRow[] = (transactions ?? []).map((t) => {
+    const merchantKey = reduceDescription(t.description_raw);
+    return {
+      id: t.id,
+      txn_date: t.txn_date,
+      description_raw: t.description_raw,
+      amount: Number(t.amount),
+      direction: t.direction,
+      category_id: t.category_id,
+      account_id: t.account_id,
+      account_name: (t.accounts as unknown as { display_name: string } | null)?.display_name ?? '',
+      txn_type_override: t.txn_type_override,
+      category_txn_type: (t.categories as unknown as { txn_type: TxnType } | null)?.txn_type ?? 'expense',
+      merchant_key: merchantKey,
+      merchant_name: aliasByKey.get(merchantKey) ?? null,
+    };
+  });
 
   const totalCount = count ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));

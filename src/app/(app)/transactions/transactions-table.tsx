@@ -18,6 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import type { TxnType } from '@/lib/transactions/type';
 import { bulkUpdateTransactionCategory } from './actions';
 import { CategoryPicker } from './category-picker';
+import { MerchantNameCell } from './merchant-name-cell';
 import { TxnTypePicker } from './txn-type-picker';
 
 interface Category {
@@ -37,6 +38,8 @@ export interface TransactionRow {
   account_name: string;
   txn_type_override: TxnType | null;
   category_txn_type: TxnType;
+  merchant_key: string;
+  merchant_name: string | null;
 }
 
 type SortColumn = 'txn_date' | 'description_raw' | 'amount';
@@ -220,7 +223,9 @@ export function TransactionsTable({
                   />
                 </TableCell>
                 <TableCell>{txn.txn_date}</TableCell>
-                <TableCell className="max-w-xs truncate whitespace-normal">{txn.description_raw}</TableCell>
+                <TableCell>
+                  <MerchantNameCell merchantKey={txn.merchant_key} descriptionRaw={txn.description_raw} aliasName={txn.merchant_name} />
+                </TableCell>
                 <TableCell>{txn.account_name}</TableCell>
                 <TableCell
                   className={`text-right tabular-nums ${txn.direction === 'credit' ? 'text-emerald-600 dark:text-emerald-500' : ''}`}

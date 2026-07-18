@@ -90,6 +90,27 @@ export async function findSimilarTransactions(transactionId: string, newCategory
     .map((t) => ({ ...t, amount: Number(t.amount) }));
 }
 
+/**
+ * Sets (or, given an empty name, clears) the display name for every transaction whose narration
+ * reduces to this merchant key - a pure display override, description_raw is untouched.
+ */
+export async function setMerchantAlias(merchantKey: string, displayName: string) {
+  const user = await requireOwnerUser();
+  const trimmed = displayName.trim();
+  const supabase = await createClient();
+
+  const { error } = trimmed
+    ? await supabase
+        .from('merchant_aliases')
+        .upsert({ user_id: user.id, merchant_key: merchantKey, display_name: trimmed }, { onConflict: 'user_id,merchant_key' })
+    : await supabase.from('merchant_aliases').delete().eq('user_id', user.id).eq('merchant_key', merchantKey);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath('/transactions');
+  revalidatePath('/dashboard');
+}
+
 export async function bulkUpdateTransactionCategory(transactionIds: string[], categoryId: string) {
   const user = await requireOwnerUser();
   if (transactionIds.length === 0) return;

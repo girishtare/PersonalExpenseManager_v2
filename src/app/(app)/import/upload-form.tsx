@@ -57,36 +57,42 @@ export function UploadForm({ accounts }: { accounts: Account[] }) {
 
   return (
     <form onSubmit={handleSubmit}>
-      <Card className="flex max-w-sm flex-col gap-3 p-4">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="accountId">Account</Label>
-          <Select
-            name="accountId"
-            items={accounts.map((account) => ({ value: account.id, label: account.display_name }))}
-            defaultValue={accounts[0]?.id}
-            required
-          >
-            <SelectTrigger id="accountId" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {accounts.map((account) => (
-                <SelectItem key={account.id} value={account.id}>
-                  {account.display_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      <Card className="flex flex-col gap-3 p-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="accountId">Account</Label>
+            <Select
+              name="accountId"
+              items={accounts.map((account) => ({ value: account.id, label: account.display_name }))}
+              defaultValue={accounts[0]?.id}
+              required
+            >
+              <SelectTrigger id="accountId" className="w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {accounts.map((account) => (
+                  <SelectItem key={account.id} value={account.id}>
+                    {account.display_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="file">Statement file (.csv, .xlsx, or .pdf)</Label>
-          <Input id="file" name="file" type="file" accept=".csv,.xlsx,.xls,.pdf" required />
-        </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="file">Statement file (.csv, .xlsx, or .pdf)</Label>
+            <Input id="file" name="file" type="file" accept=".csv,.xlsx,.xls,.pdf" required className="w-72" />
+          </div>
 
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="password">PDF password (if password-protected)</Label>
-          <Input id="password" name="password" type="password" placeholder="Only needed for protected PDFs" />
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="password">PDF password (if password-protected)</Label>
+            <Input id="password" name="password" type="password" placeholder="Only needed for protected PDFs" className="w-56" />
+          </div>
+
+          <Button type="submit" disabled={pending}>
+            {pending ? 'Uploading…' : 'Upload statement'}
+          </Button>
         </div>
 
         {error && (
@@ -112,10 +118,6 @@ export function UploadForm({ accounts }: { accounts: Account[] }) {
             )}
           </div>
         )}
-
-        <Button type="submit" disabled={pending}>
-          {pending ? 'Uploading…' : 'Upload statement'}
-        </Button>
       </Card>
     </form>
   );
