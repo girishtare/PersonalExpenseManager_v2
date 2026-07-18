@@ -58,10 +58,6 @@ export function DashboardFilters({
   return (
     <div className="flex flex-wrap items-end gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm">
       <div className="flex flex-col gap-1.5">
-        <span className="text-xs text-muted-foreground">Date range</span>
-        <DateRangePicker start={start} end={end} onChange={(s, e) => update({ start: s, end: e })} />
-      </div>
-      <div className="flex flex-col gap-1.5">
         <span className="text-xs text-muted-foreground">Jump to month</span>
         <Select<string> items={monthOptions()} onValueChange={(value) => value && jumpToMonth(value)}>
           <SelectTrigger className="w-44">
@@ -75,6 +71,10 @@ export function DashboardFilters({
             ))}
           </SelectContent>
         </Select>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <span className="text-xs text-muted-foreground">Date range</span>
+        <DateRangePicker start={start} end={end} onChange={(s, e) => update({ start: s, end: e })} />
       </div>
       <div className="flex flex-col gap-1.5">
         <span className="text-xs text-muted-foreground">Account</span>
