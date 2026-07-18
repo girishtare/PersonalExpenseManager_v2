@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card';
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { DisconnectButton } from './disconnect-button';
+import { SyncButton } from './sync-button';
 
 const ROLES = [
   { role: 'live' as const, title: 'Live', description: 'The Gmail address that currently receives HDFC alert emails.' },
@@ -72,7 +73,10 @@ export default async function SettingsPage({
                   )}
                 </div>
                 {connection ? (
-                  <DisconnectButton connectionId={connection.id} />
+                  <div className="flex items-start gap-2">
+                    <SyncButton connectionId={connection.id} />
+                    <DisconnectButton connectionId={connection.id} />
+                  </div>
                 ) : (
                   <a href={`/api/gmail/connect?role=${role}`} className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}>
                     Connect Gmail
