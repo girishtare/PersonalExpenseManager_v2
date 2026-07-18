@@ -13,6 +13,7 @@ const NAV_LINKS = [
   { href: '/categories', label: 'Categories' },
   { href: '/budget', label: 'Budget' },
   { href: '/reconciliation', label: 'CC Reconciliation' },
+  { href: '/settings', label: 'Settings' },
 ];
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
