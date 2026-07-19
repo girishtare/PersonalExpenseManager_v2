@@ -207,9 +207,19 @@ export async function POST(request: Request) {
     supabase = cookieClient;
   }
 
+  // Process as many batches as fit in this invocation's own time budget before handing off via
+  // after() - Vercel's own infra will kill a self-referential request chain after a handful of
+  // hops ("508 Loop Detected"), confirmed by actually running a sync end to end. Looping batches
+  // in-process first means a mailbox that fits within maxDuration needs zero hops at all, and
+  // even a very large one needs far fewer than one hop per 20-message batch.
+  const deadline = Date.now() + 45_000;
   let result: BatchResult;
+  let nextToken = pageToken;
   try {
-    result = await processBatch(supabase, connectionId, pageToken);
+    do {
+      result = await processBatch(supabase, connectionId, nextToken);
+      nextToken = result.nextPageToken ?? undefined;
+    } while (!result.done && Date.now() < deadline);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Sync failed.';
     await markFailed(connectionId, message);
@@ -217,9 +227,9 @@ export async function POST(request: Request) {
   }
 
   if (!result.done) {
-    // Keep going server-side via a genuine new invocation (its own fresh time budget) rather
-    // than looping in-process, so the sync survives the user navigating away or closing the
-    // tab entirely - it isn't tied to this request's lifetime at all past this point.
+    // Still more to do once this invocation's own time budget ran out - hand off to a genuine
+    // new invocation (its own fresh budget) via after(), so the sync survives the user
+    // navigating away or closing the tab entirely rather than being tied to this request.
     const origin = new URL(request.url).origin;
     const nextPageToken = result.nextPageToken;
     after(async () => {
