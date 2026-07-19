@@ -141,6 +141,9 @@ async function processBatch(supabase: SupabaseClient, connectionId: string, page
       sync_duplicates: (connection.sync_duplicates ?? 0) + duplicates,
       sync_skipped: (connection.sync_skipped ?? 0) + skipped,
       sync_unmatched_account: (connection.sync_unmatched_account ?? 0) + unmatchedAccount,
+      // Persisted so a run that gets cut off (see markFailed) can resume from here on the next
+      // "Sync now" click instead of re-scanning everything already covered.
+      sync_resume_token: list.nextPageToken ?? null,
       sync_error: null,
       ...(done ? { last_synced_at: new Date().toISOString() } : {}),
     })
@@ -163,12 +166,27 @@ async function markFailed(connectionId: string, message: string) {
   await supabase.from('email_connections').update({ sync_status: 'error', sync_error: message }).eq('id', connectionId);
 }
 
+/** Vercel cuts a self-referential chain off after a handful of hops - not a real failure, just
+ * a stopping point. sync_resume_token is already up to date from the last successful batch, so
+ * this just needs a status/message that makes the next "Sync now" click pick up from there. */
+async function markPaused(connectionId: string) {
+  const supabase = createServiceClient();
+  const { data } = await supabase.from('email_connections').select('sync_processed').eq('id', connectionId).maybeSingle();
+  await supabase
+    .from('email_connections')
+    .update({
+      sync_status: 'error',
+      sync_error: `Paused after ${data?.sync_processed ?? 0} emails (platform limit on one run) - click Sync now to continue.`,
+    })
+    .eq('id', connectionId);
+}
+
 export async function POST(request: Request) {
   const isInternal = request.headers.get('authorization') === `Bearer ${process.env.INTERNAL_SYNC_SECRET}`;
 
   const body = await request.json().catch(() => ({}));
   const connectionId = body.connectionId;
-  const pageToken = typeof body.pageToken === 'string' ? body.pageToken : undefined;
+  let pageToken = typeof body.pageToken === 'string' ? body.pageToken : undefined;
   if (typeof connectionId !== 'string') {
     return NextResponse.json({ error: 'connectionId is required.' }, { status: 400 });
   }
@@ -182,14 +200,24 @@ export async function POST(request: Request) {
   } else {
     const user = await requireOwnerUser();
     const cookieClient = await createClient();
-    const { data: owned } = await cookieClient.from('email_connections').select('id, sync_status').eq('id', connectionId).eq('user_id', user.id).maybeSingle();
+    const { data: owned } = await cookieClient
+      .from('email_connections')
+      .select('id, sync_status, sync_resume_token')
+      .eq('id', connectionId)
+      .eq('user_id', user.id)
+      .maybeSingle();
     if (!owned) return NextResponse.json({ error: 'Connection not found.' }, { status: 404 });
-    if (!pageToken) {
-      if (owned.sync_status === 'running') {
-        return NextResponse.json({ error: 'A sync is already in progress for this connection.' }, { status: 409 });
-      }
-      // A fresh start (not a continuation) - reset progress so it doesn't accumulate on top of
-      // whatever an earlier completed or errored run left behind.
+    if (owned.sync_status === 'running') {
+      return NextResponse.json({ error: 'A sync is already in progress for this connection.' }, { status: 409 });
+    }
+    if (owned.sync_resume_token) {
+      // A previous run got cut off (Vercel's chain-length limit, or a real error) partway
+      // through - continue from there instead of re-scanning everything already covered.
+      pageToken = owned.sync_resume_token;
+      await cookieClient.from('email_connections').update({ sync_status: 'running', sync_error: null }).eq('id', connectionId);
+    } else {
+      // A genuinely fresh start - reset progress so it doesn't accumulate on top of whatever
+      // an earlier completed run left behind.
       await cookieClient
         .from('email_connections')
         .update({
@@ -239,9 +267,9 @@ export async function POST(request: Request) {
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.INTERNAL_SYNC_SECRET}` },
           body: JSON.stringify({ connectionId, pageToken: nextPageToken }),
         });
-        if (!res.ok) await markFailed(connectionId, `Sync chain broke (status ${res.status}).`);
-      } catch (err) {
-        await markFailed(connectionId, err instanceof Error ? err.message : 'Sync chain broke.');
+        if (!res.ok) await markPaused(connectionId);
+      } catch {
+        await markPaused(connectionId);
       }
     });
   }
