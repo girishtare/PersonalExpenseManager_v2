@@ -30,6 +30,7 @@ export function TxnTypePicker({
 }) {
   const [value, setValue] = useState<string>(txnTypeOverride ?? AUTO);
   const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   const items = [
     { value: AUTO, label: `Auto (${TXN_TYPE_LABELS[categoryTxnType]})` },
@@ -37,28 +38,40 @@ export function TxnTypePicker({
   ];
 
   return (
-    <Select
-      items={items}
-      value={value}
-      disabled={isPending}
-      onValueChange={(v) => {
-        if (!v) return;
-        setValue(v);
-        startTransition(() => {
-          updateTransactionTxnTypeOverride(transactionId, v === AUTO ? null : (v as TxnType));
-        });
-      }}
-    >
-      <SelectTrigger size="sm" className="text-xs">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {items.map((item) => (
-          <SelectItem key={item.value} value={item.value}>
-            {item.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <div className="flex flex-col gap-0.5">
+      <Select
+        items={items}
+        value={value}
+        disabled={isPending}
+        onValueChange={(v) => {
+          if (!v) return;
+          const previous = value;
+          setValue(v);
+          setError(null);
+          startTransition(async () => {
+            try {
+              await updateTransactionTxnTypeOverride(transactionId, v === AUTO ? null : (v as TxnType));
+            } catch (err) {
+              // Without try/catch here, startTransition silently drops the error and the
+              // dropdown is left showing a value that was never actually saved.
+              setValue(previous);
+              setError(err instanceof Error ? err.message : 'Could not update type. Please try again.');
+            }
+          });
+        }}
+      >
+        <SelectTrigger size="sm" className="text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {items.map((item) => (
+            <SelectItem key={item.value} value={item.value}>
+              {item.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {error && <span className="text-xs text-destructive">{error}</span>}
+    </div>
   );
 }

@@ -75,19 +75,34 @@ export async function findSimilarTransactions(transactionId: string, newCategory
   // Too short to be a reliable merchant/counterparty signature - skip to avoid false-positive matches.
   if (targetKey.length < 4) return [];
 
-  const { data: candidates } = await supabase
-    .from('transactions')
-    .select('id, txn_date, description_raw, amount, direction, category_id')
-    .eq('user_id', user.id)
-    .eq('direction', target.direction)
-    .neq('id', transactionId)
-    .neq('category_id', newCategoryId)
-    .order('txn_date', { ascending: false })
-    .limit(2000);
+  // PostgREST silently caps any single request at the project's max-rows setting (1000 on this
+  // project) no matter what .limit() asks for - it does NOT error, it just returns fewer rows.
+  // Combined with ordering by date, that meant older transactions past the cap were invisible to
+  // this search once the account passed ~1000 transactions, so "apply to similar" would
+  // intermittently miss real matches depending on how many newer transactions existed. Page
+  // through everything instead of trusting a single limited request.
+  const PAGE_SIZE = 1000;
+  const matches: SimilarTransaction[] = [];
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    const { data: page, error } = await supabase
+      .from('transactions')
+      .select('id, txn_date, description_raw, amount, direction, category_id')
+      .eq('user_id', user.id)
+      .eq('direction', target.direction)
+      .neq('id', transactionId)
+      .neq('category_id', newCategoryId)
+      .range(offset, offset + PAGE_SIZE - 1);
+    if (error || !page) break;
 
-  return (candidates ?? [])
-    .filter((t) => reduceDescription(t.description_raw) === targetKey)
-    .map((t) => ({ ...t, amount: Number(t.amount) }));
+    for (const t of page) {
+      if (reduceDescription(t.description_raw) === targetKey) {
+        matches.push({ ...t, amount: Number(t.amount) });
+      }
+    }
+    if (page.length < PAGE_SIZE) break;
+  }
+
+  return matches.sort((a, b) => (a.txn_date < b.txn_date ? 1 : -1));
 }
 
 /**

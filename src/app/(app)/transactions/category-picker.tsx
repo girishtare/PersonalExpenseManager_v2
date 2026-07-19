@@ -46,23 +46,33 @@ export function CategoryPicker({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pendingCategoryId, setPendingCategoryId] = useState<string | null>(null);
   const [applying, startApplying] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   const categoryNameById = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories]);
 
   function handleChange(newCategoryId: string | null) {
     if (!newCategoryId) return;
     setValue(newCategoryId);
+    setError(null);
     startTransition(async () => {
-      // Look up matches before writing anything - committing first would revalidate the page
-      // and could tear down this row (e.g. if a category filter is active) before the dialog
-      // ever gets to show.
-      const matches = await findSimilarTransactions(transactionId, newCategoryId);
-      if (matches.length > 0) {
-        setSimilar(matches);
-        setSelected(new Set(matches.map((m) => m.id)));
-        setPendingCategoryId(newCategoryId);
-      } else {
-        await updateTransactionCategory(transactionId, newCategoryId);
+      try {
+        // Look up matches before writing anything - committing first would revalidate the page
+        // and could tear down this row (e.g. if a category filter is active) before the dialog
+        // ever gets to show.
+        const matches = await findSimilarTransactions(transactionId, newCategoryId);
+        if (matches.length > 0) {
+          setSimilar(matches);
+          setSelected(new Set(matches.map((m) => m.id)));
+          setPendingCategoryId(newCategoryId);
+        } else {
+          await updateTransactionCategory(transactionId, newCategoryId);
+        }
+      } catch (err) {
+        // startTransition swallows exceptions from an async callback rather than surfacing
+        // them anywhere - without this catch, a transient failure here looks like the picker
+        // silently doing nothing, indistinguishable from the request never having happened.
+        setValue(categoryId);
+        setError(err instanceof Error ? err.message : 'Could not update category. Please try again.');
       }
     });
   }
@@ -71,6 +81,7 @@ export function CategoryPicker({
     setSimilar(null);
     setSelected(new Set());
     setPendingCategoryId(null);
+    setError(null);
   }
 
   function toggleSelected(id: string) {
@@ -84,38 +95,41 @@ export function CategoryPicker({
 
   return (
     <>
-      <Select
-        items={categories.map((c) => ({ value: c.id, label: c.name }))}
-        value={value}
-        disabled={isPending}
-        onValueChange={handleChange}
-      >
-        <SelectTrigger size="sm" className="text-xs">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectGroup>
-            <SelectLabel>Income</SelectLabel>
-            {categories
-              .filter((c) => c.type === 'income')
-              .map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}
-                </SelectItem>
-              ))}
-          </SelectGroup>
-          <SelectGroup>
-            <SelectLabel>Expense</SelectLabel>
-            {categories
-              .filter((c) => c.type === 'expense')
-              .map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}
-                </SelectItem>
-              ))}
-          </SelectGroup>
-        </SelectContent>
-      </Select>
+      <div className="flex flex-col gap-0.5">
+        <Select
+          items={categories.map((c) => ({ value: c.id, label: c.name }))}
+          value={value}
+          disabled={isPending}
+          onValueChange={handleChange}
+        >
+          <SelectTrigger size="sm" className="text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectLabel>Income</SelectLabel>
+              {categories
+                .filter((c) => c.type === 'income')
+                .map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+            </SelectGroup>
+            <SelectGroup>
+              <SelectLabel>Expense</SelectLabel>
+              {categories
+                .filter((c) => c.type === 'expense')
+                .map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        {error && !similar && <span className="text-xs text-destructive">{error}</span>}
+      </div>
 
       <Dialog open={similar !== null} onOpenChange={(open) => !open && closeDialog()}>
         <DialogContent className="sm:max-w-lg">
@@ -148,6 +162,8 @@ export function CategoryPicker({
             ))}
           </div>
 
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
           <DialogFooter>
             <Button
               type="button"
@@ -155,8 +171,15 @@ export function CategoryPicker({
               disabled={applying}
               onClick={() =>
                 startApplying(async () => {
-                  if (pendingCategoryId) await updateTransactionCategory(transactionId, pendingCategoryId);
-                  closeDialog();
+                  try {
+                    if (pendingCategoryId) await updateTransactionCategory(transactionId, pendingCategoryId);
+                    closeDialog();
+                  } catch (err) {
+                    // Leave the dialog open with the selection intact so the user can just
+                    // retry, rather than silently doing nothing (see handleChange for why this
+                    // try/catch is required around every server-action call in this component).
+                    setError(err instanceof Error ? err.message : 'Could not update category. Please try again.');
+                  }
                 })
               }
             >
@@ -167,10 +190,14 @@ export function CategoryPicker({
               disabled={applying || selected.size === 0 || !pendingCategoryId}
               onClick={() =>
                 startApplying(async () => {
-                  if (pendingCategoryId) {
-                    await bulkUpdateTransactionCategory([transactionId, ...selected], pendingCategoryId);
+                  try {
+                    if (pendingCategoryId) {
+                      await bulkUpdateTransactionCategory([transactionId, ...selected], pendingCategoryId);
+                    }
+                    closeDialog();
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Could not apply category to selected transactions. Please try again.');
                   }
-                  closeDialog();
                 })
               }
             >

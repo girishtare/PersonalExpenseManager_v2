@@ -107,6 +107,7 @@ export function TransactionsTable({
 
   const [bulkCategoryId, setBulkCategoryId] = useState<string | undefined>(undefined);
   const [applying, startApplying] = useTransition();
+  const [bulkError, setBulkError] = useState<string | null>(null);
 
   const allSelected = transactions.length > 0 && transactions.every((t) => selected.has(t.id));
   const someSelected = selected.size > 0 && !allSelected;
@@ -163,18 +164,35 @@ export function TransactionsTable({
             onClick={() =>
               startApplying(async () => {
                 if (!bulkCategoryId) return;
-                await bulkUpdateTransactionCategory([...selected], bulkCategoryId);
-                setSelected(new Set());
-                setBulkCategoryId(undefined);
+                setBulkError(null);
+                try {
+                  await bulkUpdateTransactionCategory([...selected], bulkCategoryId);
+                  setSelected(new Set());
+                  setBulkCategoryId(undefined);
+                } catch (err) {
+                  // startTransition drops errors from an async callback otherwise - without this,
+                  // a failed bulk update leaves the selection in place with no explanation.
+                  setBulkError(err instanceof Error ? err.message : 'Could not apply category. Please try again.');
+                }
               })
             }
           >
             Apply to {selected.size}
           </Button>
-          <Button type="button" size="sm" variant="ghost" disabled={applying} onClick={() => setSelected(new Set())}>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={applying}
+            onClick={() => {
+              setSelected(new Set());
+              setBulkError(null);
+            }}
+          >
             Clear
           </Button>
           <span className="text-xs text-muted-foreground">Only affects the rows on this page.</span>
+          {bulkError && <span className="text-xs text-destructive">{bulkError}</span>}
         </div>
       )}
 
