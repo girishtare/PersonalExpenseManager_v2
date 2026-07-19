@@ -61,3 +61,15 @@ export async function getConnectionSyncStatus(connectionId: string): Promise<Syn
     lastSyncedAt: data.last_synced_at,
   };
 }
+
+/**
+ * Polled by the app header's sync indicator (all pages, not just /settings) - true if any
+ * connection is mid-sync, whether that run was started by a manual "Sync now" click or the
+ * dashboard's 24h auto-trigger.
+ */
+export async function getAnySyncRunning(): Promise<boolean> {
+  const user = await requireOwnerUser();
+  const supabase = await createClient();
+  const { data } = await supabase.from('email_connections').select('id').eq('user_id', user.id).eq('sync_status', 'running').limit(1);
+  return (data?.length ?? 0) > 0;
+}

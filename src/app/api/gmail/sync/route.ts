@@ -195,21 +195,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'connectionId is required.' }, { status: 400 });
   }
 
+  // Internal calls come from two different places: a self-chained continuation (always carries
+  // a pageToken, always a legitimate ongoing run) and the dashboard's 24h auto-trigger (never
+  // carries a pageToken, needs the exact same "already running?" / "resume or reset?" gate a
+  // user-initiated click gets - it just authenticates as the system rather than as a cookie).
   let supabase: SupabaseClient;
+  let ownerId: string | undefined;
   if (isInternal) {
-    // Every subsequent link in a sync chain is this server calling itself (see the after()
-    // block below) - it only ever continues a connectionId the original user-initiated call
-    // already validated ownership of, so it's safe to use the service client here.
     supabase = createServiceClient();
   } else {
-    const user = await requireOwnerUser();
-    const cookieClient = await createClient();
-    const { data: owned } = await cookieClient
-      .from('email_connections')
-      .select('id, sync_status, sync_resume_token')
-      .eq('id', connectionId)
-      .eq('user_id', user.id)
-      .maybeSingle();
+    ownerId = (await requireOwnerUser()).id;
+    supabase = await createClient();
+  }
+
+  if (!pageToken) {
+    let query = supabase.from('email_connections').select('id, sync_status, sync_resume_token').eq('id', connectionId);
+    if (ownerId) query = query.eq('user_id', ownerId);
+    const { data: owned } = await query.maybeSingle();
     if (!owned) return NextResponse.json({ error: 'Connection not found.' }, { status: 404 });
     if (owned.sync_status === 'running') {
       return NextResponse.json({ error: 'A sync is already in progress for this connection.' }, { status: 409 });
@@ -218,11 +220,11 @@ export async function POST(request: Request) {
       // A previous run got cut off (Vercel's chain-length limit, or a real error) partway
       // through - continue from there instead of re-scanning everything already covered.
       pageToken = owned.sync_resume_token;
-      await cookieClient.from('email_connections').update({ sync_status: 'running', sync_error: null }).eq('id', connectionId);
+      await supabase.from('email_connections').update({ sync_status: 'running', sync_error: null }).eq('id', connectionId);
     } else {
       // A genuinely fresh start - reset progress so it doesn't accumulate on top of whatever
       // an earlier completed run left behind.
-      await cookieClient
+      await supabase
         .from('email_connections')
         .update({
           sync_status: 'running',
@@ -236,7 +238,6 @@ export async function POST(request: Request) {
         })
         .eq('id', connectionId);
     }
-    supabase = cookieClient;
   }
 
   // Process as many batches as fit in this invocation's own time budget before handing off via

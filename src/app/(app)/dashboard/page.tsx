@@ -1,5 +1,8 @@
 import { ArrowDownRight, ArrowUpRight, BarChart3, Minus, PiggyBank, Receipt, TrendingUp, Wallet } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { after } from 'next/server';
+import { headers } from 'next/headers';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireOwnerUser } from '@/lib/auth/dal';
 import { createClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
@@ -18,6 +21,42 @@ import { TopMerchantsTable } from './top-merchants-table';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
+
+const AUTO_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * If the "live" Gmail connection hasn't synced in the last 24h (or never has), kicks off a sync
+ * in the background via after() - runs after this page's response is already sent, so it never
+ * adds latency to a dashboard visit. Reuses /api/gmail/sync's own "already running?" guard (see
+ * that route), so it's safe to call on every visit even if an earlier auto-trigger or a manual
+ * "Sync now" click is still in flight.
+ */
+async function maybeAutoSyncLiveMailbox(supabase: SupabaseClient, userId: string) {
+  const { data: live } = await supabase
+    .from('email_connections')
+    .select('id, sync_status, last_synced_at')
+    .eq('user_id', userId)
+    .eq('role', 'live')
+    .maybeSingle();
+  if (!live || live.sync_status === 'running') return;
+
+  const isStale = !live.last_synced_at || Date.now() - new Date(live.last_synced_at).getTime() > AUTO_SYNC_INTERVAL_MS;
+  if (!isStale) return;
+
+  const host = (await headers()).get('host');
+  if (!host) return;
+  const protocol = host.startsWith('localhost') || host.startsWith('127.0.0.1') ? 'http' : 'https';
+  const origin = `${protocol}://${host}`;
+  const connectionId = live.id;
+
+  after(async () => {
+    await fetch(`${origin}/api/gmail/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.INTERNAL_SYNC_SECRET}` },
+      body: JSON.stringify({ connectionId }),
+    }).catch(() => {});
+  });
+}
 
 function monthLabel(date: Date): string {
   return date.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
@@ -93,6 +132,8 @@ export default async function DashboardPage({
   const user = await requireOwnerUser();
   const supabase = await createClient();
   const params = await searchParams;
+
+  await maybeAutoSyncLiveMailbox(supabase, user.id);
 
   const today = new Date();
   const defaultStart = new Date(today.getFullYear(), today.getMonth(), 1);

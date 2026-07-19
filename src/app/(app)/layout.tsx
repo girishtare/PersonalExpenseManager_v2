@@ -1,9 +1,11 @@
 import Link from 'next/link';
 import { LogOut } from 'lucide-react';
 import { requireOwnerUser } from '@/lib/auth/dal';
+import { createClient } from '@/lib/supabase/server';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { signOut } from './actions';
+import { SyncIndicator } from './sync-indicator';
 
 const NAV_LINKS = [
   { href: '/dashboard', label: 'Dashboard' },
@@ -18,6 +20,9 @@ const NAV_LINKS = [
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireOwnerUser();
+  const supabase = await createClient();
+  const { data: connections } = await supabase.from('email_connections').select('sync_status').eq('user_id', user.id);
+  const anySyncing = (connections ?? []).some((c) => c.sync_status === 'running');
 
   return (
     <div className="flex flex-1 flex-col bg-muted">
@@ -33,6 +38,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         </div>
         <div className="flex items-center gap-4">
+          <SyncIndicator initialSyncing={anySyncing} />
           <ThemeToggle />
           <form action={signOut} className="flex items-center gap-3 text-sm text-muted-foreground">
             <span className="hidden sm:inline">{user.email}</span>
