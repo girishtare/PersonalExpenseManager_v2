@@ -180,14 +180,19 @@ export default async function DashboardPage({
     return accountId ? q.eq('account_id', accountId) : q;
   };
 
-  const [{ data: accounts }, currentRows, previousRows, trendRows, recurrenceRows, { data: merchantAliases }] = await Promise.all([
-    supabase.from('accounts').select('id, display_name').eq('user_id', user.id).order('created_at', { ascending: true }),
-    fetchAllRows(currentQuery),
-    fetchAllRows(previousQuery),
-    fetchAllRows(trendQuery),
-    fetchAllRows(recurrenceQuery),
-    supabase.from('merchant_aliases').select('merchant_key, display_name').eq('user_id', user.id),
-  ]);
+  const [{ data: accounts }, currentRows, previousRows, trendRows, recurrenceRows, { data: merchantAliases }, { data: earliestTxn }] =
+    await Promise.all([
+      supabase.from('accounts').select('id, display_name').eq('user_id', user.id).order('created_at', { ascending: true }),
+      fetchAllRows(currentQuery),
+      fetchAllRows(previousQuery),
+      fetchAllRows(trendQuery),
+      fetchAllRows(recurrenceQuery),
+      supabase.from('merchant_aliases').select('merchant_key, display_name').eq('user_id', user.id),
+      // Powers the Year dropdown's lower bound - only years that actually have data, rather than
+      // an arbitrary fixed lookback.
+      supabase.from('transactions').select('txn_date').eq('user_id', user.id).order('txn_date', { ascending: true }).limit(1).maybeSingle(),
+    ]);
+  const earliestYear = earliestTxn ? Number(earliestTxn.txn_date.slice(0, 4)) : today.getFullYear();
 
   const merchantAliasByKey = new Map((merchantAliases ?? []).map((a) => [a.merchant_key, a.display_name]));
 
@@ -252,6 +257,7 @@ export default async function DashboardPage({
         start={toDateKey(start)}
         end={toDateKey(end)}
         accountId={accountId}
+        earliestYear={earliestYear}
       />
 
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">

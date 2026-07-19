@@ -15,20 +15,19 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-// Deliberately generous - bank statement imports (as opposed to the Gmail alert sync, which
-// can only ever reach as far back as the mailbox has alert emails) can carry much older data.
-const YEARS_BACK = 30;
-
 export function DashboardFilters({
   accounts,
   start,
   end,
   accountId,
+  earliestYear,
 }: {
   accounts: Account[];
   start: string;
   end: string;
   accountId: string;
+  /** Year of the earliest transaction on record - the Year dropdown only goes back this far. */
+  earliestYear: number;
 }) {
   const router = useRouter();
 
@@ -45,6 +44,7 @@ export function DashboardFilters({
   const today = new Date();
   const [jumpMonth, setJumpMonth] = useState(today.getMonth() + 1);
   const [jumpYear, setJumpYear] = useState(today.getFullYear());
+  const years = Array.from({ length: today.getFullYear() - earliestYear + 1 }, (_, i) => today.getFullYear() - i);
 
   function jumpTo(year: number, month: number) {
     const monthStart = new Date(year, month - 1, 1);
@@ -82,10 +82,7 @@ export function DashboardFilters({
       <div className="flex flex-col gap-1.5">
         <span className="text-xs text-muted-foreground">Year</span>
         <Select<string>
-          items={Array.from({ length: YEARS_BACK }, (_, i) => {
-            const y = today.getFullYear() - i;
-            return { value: String(y), label: String(y) };
-          })}
+          items={years.map((y) => ({ value: String(y), label: String(y) }))}
           value={String(jumpYear)}
           onValueChange={(value) => {
             if (!value) return;
@@ -98,7 +95,7 @@ export function DashboardFilters({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {Array.from({ length: YEARS_BACK }, (_, i) => today.getFullYear() - i).map((y) => (
+            {years.map((y) => (
               <SelectItem key={y} value={String(y)}>
                 {y}
               </SelectItem>
