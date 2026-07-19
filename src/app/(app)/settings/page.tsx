@@ -6,6 +6,22 @@ import { cn } from '@/lib/utils';
 import { DisconnectButton } from './disconnect-button';
 import { SyncButton } from './sync-button';
 
+/** "19-Jul-2026, 03:59:56 am" in IST, regardless of the server/viewer's own timezone. */
+function formatIST(iso: string): string {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  }).formatToParts(new Date(iso));
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+  return `${get('day')}-${get('month')}-${get('year')}, ${get('hour')}:${get('minute')}:${get('second')} ${get('dayPeriod').toLowerCase()}`;
+}
+
 const ROLES = [
   { role: 'live' as const, title: 'Live', description: 'The Gmail address that currently receives HDFC alert emails.' },
   {
@@ -32,7 +48,7 @@ export default async function SettingsPage({
   const { data: connections } = await supabase
     .from('email_connections')
     .select(
-      'id, email_address, role, last_synced_at, sync_status, sync_processed, sync_total, sync_imported, sync_duplicates, sync_skipped, sync_unmatched_account, sync_error'
+      'id, email_address, role, last_synced_at, updated_at, sync_status, sync_processed, sync_total, sync_imported, sync_duplicates, sync_skipped, sync_unmatched_account, sync_error'
     )
     .eq('user_id', user.id);
 
@@ -62,6 +78,10 @@ export default async function SettingsPage({
         <div className="flex flex-col gap-3">
           {ROLES.map(({ role, title, description }) => {
             const connection = connectionByRole.get(role);
+            // markPaused() in /api/gmail/sync always starts the message this way - distinguishes
+            // "stopped because the platform capped how far one run could get" (progress is real
+            // and safe to resume) from a genuine error (revoked access, etc).
+            const isPaused = connection?.sync_status === 'error' && connection.sync_error?.startsWith('Paused after');
             return (
               <div
                 key={role}
@@ -76,8 +96,10 @@ export default async function SettingsPage({
                       {connection.sync_status === 'running'
                         ? ' · syncing…'
                         : connection.last_synced_at
-                          ? ` · last synced ${new Date(connection.last_synced_at).toLocaleString('en-IN')}`
-                          : ' · not synced yet'}
+                          ? ` · last synced ${formatIST(connection.last_synced_at)}`
+                          : isPaused
+                            ? ` · last synced ${formatIST(connection.updated_at)}. Paused due to platform limit on one run.`
+                            : ' · not synced yet'}
                     </p>
                   )}
                 </div>
