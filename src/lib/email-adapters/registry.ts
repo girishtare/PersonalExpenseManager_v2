@@ -3,6 +3,8 @@ import { parseSaraswatAlertEmail } from './saraswat/alert-parser';
 import { parseJupiterAlertEmail } from './jupiter/alert-parser';
 import { parseBobcardAlertEmail } from './bobcard/alert-parser';
 import { parseRblAlertEmail } from './rbl/alert-parser';
+import { parseSbmAlertEmail } from './sbm/alert-parser';
+import { parseUniAlertEmail } from './uni/alert-parser';
 import type { EmailAdapter, ParsedAlert } from './types';
 
 /**
@@ -20,6 +22,8 @@ const ADAPTERS: EmailAdapter[] = [
     senders: ['RBLAlerts@rbl.bank.in', 'alerts@rbl.bank.in', 'alerts@notification.my.rbl.bank.in', 'statements@rbl.bank.in'],
     parse: parseRblAlertEmail,
   },
+  { bankCode: 'SBM', senders: ['info@sbmbank.co.in', 'estatements@sbmbank.co.in'], parse: parseSbmAlertEmail },
+  { bankCode: 'UNI', senders: ['alerts@uni.club', 'noreply@uni.club', 'care@uni.club', 'hello@uni.cards'], parse: parseUniAlertEmail },
 ];
 
 /** Every sender address across every registered adapter - used to build the Gmail search query. */

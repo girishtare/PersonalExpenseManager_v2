@@ -85,16 +85,18 @@ function stripHtml(html: string): string {
 /** Prefers the text/plain part; falls back to stripping tags from text/html. */
 function extractMessageText(payload: GmailPart): string {
   const plain = findPart(payload, 'text/plain');
-  if (plain?.body?.data) {
-    const text = decodeBase64Url(plain.body.data);
-    // Some senders (e.g. BOBCARD's alerts) emit a placeholder plain-text part - literally the
-    // string "null" in one observed case - alongside the real content in text/html. A part that
-    // trivially short isn't real content, so fall through to HTML instead of returning it.
-    if (text.trim().length > 20) return text;
-  }
   const html = findPart(payload, 'text/html');
-  if (html?.body?.data) return stripHtml(decodeBase64Url(html.body.data));
-  if (plain?.body?.data) return decodeBase64Url(plain.body.data);
+  const plainText = plain?.body?.data ? decodeBase64Url(plain.body.data) : '';
+  const htmlText = html?.body?.data ? stripHtml(decodeBase64Url(html.body.data)) : '';
+
+  // Some senders (e.g. BOBCARD's alerts, literally the string "null") emit a placeholder
+  // plain-text part alongside the real content in text/html; others (e.g. Federal Bank's
+  // statement notifications) emit a short "view this in HTML" notice. Neither is real content -
+  // compare sizes rather than trusting a fixed length cutoff, since a genuinely short plain-text
+  // email is also legitimate.
+  if (htmlText.length > plainText.length * 2 && htmlText.length > 40) return htmlText;
+  if (plainText.trim().length > 20) return plainText;
+  if (htmlText) return htmlText;
   if (payload.body?.data) return decodeBase64Url(payload.body.data);
   return '';
 }
