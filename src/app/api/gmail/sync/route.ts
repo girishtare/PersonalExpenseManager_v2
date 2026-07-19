@@ -41,7 +41,11 @@ async function processBatch(supabase: SupabaseClient, connectionId: string, page
 
   let query = `(${SENDERS.map((s) => `from:${s}`).join(' OR ')})`;
   if (connection.last_synced_at) {
-    query += ` after:${Math.floor(new Date(connection.last_synced_at).getTime() / 1000)}`;
+    // last_synced_at marks when the previous run FINISHED, but mail arriving mid-run may not
+    // have been in that run's pagination snapshot - back the incremental window up a day so
+    // nothing falls in the gap. Re-scanning the overlap is free: dedup drops it all.
+    const overlapMs = 24 * 60 * 60 * 1000;
+    query += ` after:${Math.floor((new Date(connection.last_synced_at).getTime() - overlapMs) / 1000)}`;
   }
 
   const list = await listMessageIds({ accessToken, query, pageToken, maxResults: BATCH_SIZE });

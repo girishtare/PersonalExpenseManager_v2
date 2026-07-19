@@ -7,6 +7,7 @@ import type { TxnType } from '@/lib/transactions/type';
 import { aggregateByCategory, categoryOf, computeSavingsRate, sumByType } from '@/lib/transactions/aggregate';
 import { effectiveTxnType } from '@/lib/transactions/type';
 import { computeMtdBadge, parseDateKey, sameDaysLastMonth, toDateKey, type MtdBadge } from '@/lib/dashboard/period';
+import { fetchAllRows } from '@/lib/supabase/fetch-all';
 import { detectRecurringDebits, type RecurrenceTxn } from '@/lib/dashboard/recurrence';
 import { computeTopMerchants } from '@/lib/dashboard/merchants';
 import { DashboardFilters } from './filters';
@@ -106,47 +107,51 @@ export default async function DashboardPage({
 
   const TXN_SELECT = 'amount, txn_type_override, category_id, description_raw, categories(name, txn_type)';
 
-  let currentQuery = supabase.from('transactions').select(TXN_SELECT).gte('txn_date', toDateKey(start)).lte('txn_date', toDateKey(end));
-  let previousQuery = supabase
-    .from('transactions')
-    .select(TXN_SELECT)
-    .gte('txn_date', toDateKey(prevStart))
-    .lte('txn_date', toDateKey(prevEnd));
-  let trendQuery = supabase
-    .from('transactions')
-    .select('amount, txn_date, txn_type_override, categories(txn_type)')
-    .gte('txn_date', toDateKey(twelveMonthsAgo));
+  // All four transaction queries go through fetchAllRows - the 12-month ones already exceed
+  // PostgREST's silent 1000-row cap (which blanked the trend chart's recent months and the
+  // recurring-debits card once the dataset grew past 1000), and the period-scoped ones are one
+  // long custom date range away from the same fate.
+  const currentQuery = () => {
+    const q = supabase.from('transactions').select(TXN_SELECT).gte('txn_date', toDateKey(start)).lte('txn_date', toDateKey(end));
+    return accountId ? q.eq('account_id', accountId) : q;
+  };
+  const previousQuery = () => {
+    const q = supabase.from('transactions').select(TXN_SELECT).gte('txn_date', toDateKey(prevStart)).lte('txn_date', toDateKey(prevEnd));
+    return accountId ? q.eq('account_id', accountId) : q;
+  };
+  const trendQuery = () => {
+    const q = supabase
+      .from('transactions')
+      .select('amount, txn_date, txn_type_override, categories(txn_type)')
+      .gte('txn_date', toDateKey(twelveMonthsAgo));
+    return accountId ? q.eq('account_id', accountId) : q;
+  };
   // Upcoming known debits are always about "what's coming up from now", independent of the
   // selected viewing range - same convention as the 12-month trend always showing the last 12
   // real months regardless of the date filter.
-  let recurrenceQuery = supabase
-    .from('transactions')
-    .select('txn_date, amount, direction, description_raw')
-    .eq('direction', 'debit')
-    .gte('txn_date', toDateKey(twelveMonthsAgo))
-    .lte('txn_date', toDateKey(today));
+  const recurrenceQuery = () => {
+    const q = supabase
+      .from('transactions')
+      .select('txn_date, amount, direction, description_raw')
+      .eq('direction', 'debit')
+      .gte('txn_date', toDateKey(twelveMonthsAgo))
+      .lte('txn_date', toDateKey(today));
+    return accountId ? q.eq('account_id', accountId) : q;
+  };
 
-  if (accountId) {
-    currentQuery = currentQuery.eq('account_id', accountId);
-    previousQuery = previousQuery.eq('account_id', accountId);
-    trendQuery = trendQuery.eq('account_id', accountId);
-    recurrenceQuery = recurrenceQuery.eq('account_id', accountId);
-  }
-
-  const [{ data: accounts }, { data: currentRows }, { data: previousRows }, { data: trendRows }, { data: recurrenceRows }, { data: merchantAliases }] =
-    await Promise.all([
-      supabase.from('accounts').select('id, display_name').eq('user_id', user.id).order('created_at', { ascending: true }),
-      currentQuery,
-      previousQuery,
-      trendQuery,
-      recurrenceQuery,
-      supabase.from('merchant_aliases').select('merchant_key, display_name').eq('user_id', user.id),
-    ]);
+  const [{ data: accounts }, currentRows, previousRows, trendRows, recurrenceRows, { data: merchantAliases }] = await Promise.all([
+    supabase.from('accounts').select('id, display_name').eq('user_id', user.id).order('created_at', { ascending: true }),
+    fetchAllRows(currentQuery),
+    fetchAllRows(previousQuery),
+    fetchAllRows(trendQuery),
+    fetchAllRows(recurrenceQuery),
+    supabase.from('merchant_aliases').select('merchant_key, display_name').eq('user_id', user.id),
+  ]);
 
   const merchantAliasByKey = new Map((merchantAliases ?? []).map((a) => [a.merchant_key, a.display_name]));
 
-  const current = (currentRows ?? []) as TxnRow[];
-  const previous = (previousRows ?? []) as TxnRow[];
+  const current = currentRows as TxnRow[];
+  const previous = previousRows as TxnRow[];
 
   const expenseCategories = aggregateByCategory(current, 'expense');
   const totalIncome = sumByType(current, 'income');

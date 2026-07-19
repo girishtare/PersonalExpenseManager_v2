@@ -20,13 +20,20 @@ export function SyncButton({ connectionId, initialStatus }: { connectionId: stri
     }
   }
 
-  function startPolling() {
+  function startPolling(options?: { waitForStart?: boolean }) {
     stopPolling();
+    // When polling begins the instant a sync is kicked off, the first poll can land before the
+    // server has flipped sync_status to 'running' - without this grace logic that stale 'idle'
+    // would immediately stop the polling loop again.
+    let sawRunning = !options?.waitForStart;
+    let polls = 0;
     pollRef.current = setInterval(async () => {
       const latest = await getConnectionSyncStatus(connectionId);
       if (!latest) return;
+      polls++;
+      if (latest.status === 'running') sawRunning = true;
       setStatus(latest);
-      if (latest.status !== 'running') {
+      if (latest.status !== 'running' && (sawRunning || polls >= 5)) {
         stopPolling();
         router.refresh();
       }
@@ -45,22 +52,30 @@ export function SyncButton({ connectionId, initialStatus }: { connectionId: stri
   async function handleClick() {
     setStartError(null);
     setStatus((s) => ({ ...s, status: 'running', processed: 0, total: 0 }));
+    // Poll from the very start - the kickoff request below stays busy processing batches for up
+    // to ~a minute before responding, and the DB-backed progress is live the whole time.
+    startPolling({ waitForStart: true });
     try {
       const res = await fetch('/api/gmail/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ connectionId }),
       });
-      const data = await res.json();
       if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        stopPolling();
         setStartError(data.error ?? 'Sync failed.');
         setStatus((s) => ({ ...s, status: 'error' }));
-        return;
       }
-      startPolling();
     } catch {
-      setStartError('Something went wrong while starting the sync. Please try again.');
-      setStatus((s) => ({ ...s, status: 'error' }));
+      // The kickoff request aborts if the user navigates away mid-run - the sync itself keeps
+      // going server-side, so only report a failure if we're still around to know better.
+      const latest = await getConnectionSyncStatus(connectionId).catch(() => null);
+      if (latest && latest.status !== 'running') {
+        stopPolling();
+        setStartError('Something went wrong while starting the sync. Please try again.');
+        setStatus((s) => ({ ...s, status: 'error' }));
+      }
     }
   }
 

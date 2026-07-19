@@ -1,5 +1,6 @@
 import { requireOwnerUser } from '@/lib/auth/dal';
 import { createClient } from '@/lib/supabase/server';
+import { fetchAllRows } from '@/lib/supabase/fetch-all';
 import { Card } from '@/components/ui/card';
 import {
   findStatementTotalMismatches,
@@ -61,12 +62,14 @@ export default async function ReconciliationPage() {
   const result = reconcileCcBillPayments(payments, statements);
 
   const statementIds = (statementRows ?? []).map((s) => s.id);
-  const { data: statementTxns } = statementIds.length
-    ? await supabase.from('transactions').select('statement_id, amount, direction').in('statement_id', statementIds)
-    : { data: [] };
+  // Paged - the per-statement sums silently lose rows past PostgREST's 1000-row cap otherwise,
+  // which would show up here as false "statement total discrepancy" flags.
+  const statementTxns = statementIds.length
+    ? await fetchAllRows(() => supabase.from('transactions').select('statement_id, amount, direction').in('statement_id', statementIds))
+    : [];
 
   const sumsByStatement = new Map<string, number>();
-  for (const t of statementTxns ?? []) {
+  for (const t of statementTxns) {
     const signed = t.direction === 'debit' ? Number(t.amount) : -Number(t.amount);
     sumsByStatement.set(t.statement_id, (sumsByStatement.get(t.statement_id) ?? 0) + signed);
   }

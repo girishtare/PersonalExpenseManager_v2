@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getBankAdapter } from '@/lib/bank-adapters/registry';
 import { StatementPasswordError } from '@/lib/bank-adapters/errors';
 import { computeDedupeHash } from '@/lib/transactions/dedupe';
+import { fetchAllRows } from '@/lib/supabase/fetch-all';
 import { categorizeTransaction, getUncategorizedCategoryId, loadActiveRules } from '@/lib/categorization/engine';
 import type { StatementSourceFormat } from '@/lib/bank-adapters/types';
 
@@ -167,6 +168,44 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 
+  // Cross-source dedup, mirror image of the one in /api/gmail/sync: transactions already
+  // imported from alert emails (statement_id null) describe the same purchases in different
+  // words, so the exact-hash upsert below can't catch them. Instead of inserting a duplicate,
+  // "claim" the email row into this statement - linking it keeps CC Reconciliation's
+  // per-statement sums correct and preserves any categorization the user already did on it.
+  let claimedCount = 0;
+  {
+    const emailRows = await fetchAllRows(() =>
+      supabase.from('transactions').select('id, txn_date, amount, direction').eq('account_id', account.id).is('statement_id', null)
+    );
+    const unclaimed = new Map<string, string[]>();
+    for (const t of emailRows) {
+      const key = `${t.txn_date}|${Number(t.amount).toFixed(2)}|${t.direction}`;
+      (unclaimed.get(key) ?? unclaimed.set(key, []).get(key)!).push(t.id);
+    }
+
+    const stillToInsert = [];
+    const idsToClaim: string[] = [];
+    for (const row of rows) {
+      const key = `${row.txn_date}|${Number(row.amount).toFixed(2)}|${row.direction}`;
+      const candidates = unclaimed.get(key);
+      if (candidates?.length) {
+        idsToClaim.push(candidates.pop()!);
+      } else {
+        stillToInsert.push(row);
+      }
+    }
+    rows = stillToInsert;
+
+    if (idsToClaim.length > 0) {
+      const { error: claimError } = await supabase.from('transactions').update({ statement_id: statementId }).in('id', idsToClaim);
+      if (claimError) {
+        return NextResponse.json({ error: `Could not link existing transactions: ${claimError.message}` }, { status: 500 });
+      }
+      claimedCount = idsToClaim.length;
+    }
+  }
+
   let importedCount = 0;
   if (rows.length > 0) {
     const { data: inserted, error: insertError } = await supabase
@@ -184,7 +223,7 @@ export async function POST(request: Request) {
     importedCount = inserted?.length ?? 0;
   }
 
-  const duplicateCount = rows.length - importedCount;
+  const duplicateCount = rows.length - importedCount + claimedCount;
   const parseStatus =
     rows.length === 0 && parsed.warnings.length > 0
       ? 'failed'
