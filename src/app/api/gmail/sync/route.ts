@@ -5,15 +5,12 @@ import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service';
 import { decrypt } from '@/lib/crypto/secret-box';
 import { getMessage, listMessageIds, refreshAccessToken } from '@/lib/google/gmail';
-import { parseHdfcAlertEmail } from '@/lib/email-adapters/hdfc/alert-parser';
+import { allEmailAlertSenders, parseAlertEmail } from '@/lib/email-adapters/registry';
 import { computeDedupeHash } from '@/lib/transactions/dedupe';
 import { categorizeTransaction, getUncategorizedCategoryId, loadActiveRules } from '@/lib/categorization/engine';
 
 export const maxDuration = 60;
 
-// HDFC migrated its InstaAlerts sender address at some point - old mail (e.g. a "historical"
-// backfill mailbox) can still carry the .net address, current mail uses .bank.in. Search both.
-const SENDERS = ['alerts@hdfcbank.bank.in', 'alerts@hdfcbank.net'];
 const BATCH_SIZE = 20;
 
 interface BatchResult {
@@ -39,7 +36,7 @@ async function processBatch(supabase: SupabaseClient, connectionId: string, page
 
   const accessToken = await refreshAccessToken(decrypt(connection.refresh_token));
 
-  let query = `(${SENDERS.map((s) => `from:${s}`).join(' OR ')})`;
+  let query = `(${allEmailAlertSenders().map((s) => `from:${s}`).join(' OR ')})`;
   if (connection.last_synced_at) {
     // last_synced_at marks when the previous run FINISHED, but mail arriving mid-run may not
     // have been in that run's pagination snapshot - back the incremental window up a day so
@@ -51,11 +48,15 @@ async function processBatch(supabase: SupabaseClient, connectionId: string, page
   const list = await listMessageIds({ accessToken, query, pageToken, maxResults: BATCH_SIZE });
 
   const [{ data: accounts }, rules, uncategorizedId] = await Promise.all([
-    supabase.from('accounts').select('id, last4').eq('user_id', connection.user_id),
+    supabase.from('accounts').select('id, bank_code, last4').eq('user_id', connection.user_id),
     loadActiveRules(supabase, connection.user_id),
     getUncategorizedCategoryId(supabase),
   ]);
-  const accountIdByLast4 = new Map((accounts ?? []).filter((a) => a.last4).map((a) => [a.last4, a.id]));
+  // Keyed by bank+last4, not last4 alone - two different banks could plausibly share a last4,
+  // and now that more than one bank is wired up that's no longer a purely theoretical risk.
+  const accountIdByBankAndLast4 = new Map(
+    (accounts ?? []).filter((a) => a.last4).map((a) => [`${a.bank_code}:${a.last4}`, a.id])
+  );
 
   let imported = 0;
   let duplicates = 0;
@@ -65,13 +66,13 @@ async function processBatch(supabase: SupabaseClient, connectionId: string, page
 
   for (const messageId of list.ids) {
     const { bodyText } = await getMessage({ accessToken, messageId });
-    const parsed = parseHdfcAlertEmail(bodyText);
+    const parsed = parseAlertEmail(bodyText);
     if (!parsed) {
       skipped++;
       continue;
     }
 
-    const accountId = accountIdByLast4.get(parsed.last4);
+    const accountId = accountIdByBankAndLast4.get(`${parsed.bankCode}:${parsed.last4}`);
     if (!accountId) {
       unmatchedAccount++;
       continue;

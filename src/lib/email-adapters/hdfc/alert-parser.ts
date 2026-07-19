@@ -1,3 +1,5 @@
+import type { ParsedAlert } from '../types';
+
 const MONTHS: Record<string, string> = {
   jan: '01',
   feb: '02',
@@ -37,15 +39,6 @@ function parseNumericDate(s: string): string {
 
 function parseAmount(s: string): number {
   return Number(s.replace(/,/g, ''));
-}
-
-export interface ParsedAlert {
-  txnDate: string;
-  amount: number;
-  direction: 'debit' | 'credit';
-  last4: string;
-  descriptionRaw: string;
-  referenceNo?: string;
 }
 
 // \s+ (not literal spaces) between every word - the real email body can hard-wrap at any point,
