@@ -3,7 +3,11 @@ import { createServerClient } from '@supabase/ssr';
 import { isAllowedEmail } from '@/lib/auth/allowlist';
 
 // Renamed from `middleware` to `proxy` per Next.js 16 (functionality is unchanged).
-const PUBLIC_ROUTES = ['/login', '/auth/callback', '/unauthorized'];
+// /api/gmail/sync is here too - it authenticates itself (real user session for a fresh call,
+// a shared secret for the server's own self-chained continuation calls, see that route), so
+// this pre-filter would otherwise redirect the secret-authenticated continuation calls (which
+// carry no user cookie at all) to /login and 405 there.
+const PUBLIC_ROUTES = ['/login', '/auth/callback', '/unauthorized', '/api/gmail/sync'];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
