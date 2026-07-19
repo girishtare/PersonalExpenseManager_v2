@@ -3,6 +3,7 @@ import { requireOwnerUser } from '@/lib/auth/dal';
 import { createClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { BANK_LABELS, type BankCode } from '@/lib/banks';
 import { AddAccountForm } from './add-account-form';
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
@@ -44,7 +45,8 @@ export default async function AccountsPage({
               >
                 <p className="font-medium">{account.display_name}</p>
                 <p className="text-sm text-muted-foreground">
-                  {account.bank_code} &middot; {ACCOUNT_TYPE_LABELS[account.account_type] ?? account.account_type}
+                  {BANK_LABELS[account.bank_code as BankCode] ?? account.bank_code} &middot;{' '}
+                  {ACCOUNT_TYPE_LABELS[account.account_type] ?? account.account_type}
                   {account.last4 ? ` · ••${account.last4}` : ''}
                 </p>
               </Card>

@@ -5,8 +5,10 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { requireOwnerUser } from '@/lib/auth/dal';
 import { createClient } from '@/lib/supabase/server';
+import { BANK_CODES } from '@/lib/banks';
 
 const AddAccountSchema = z.object({
+  bankCode: z.enum(BANK_CODES),
   accountType: z.enum(['savings', 'current', 'credit_card']),
   displayName: z.string().trim().min(1, 'Name is required').max(100),
   last4: z
@@ -25,6 +27,7 @@ export async function createAccount(_prevState: AddAccountState | undefined, for
   const user = await requireOwnerUser();
 
   const parsed = AddAccountSchema.safeParse({
+    bankCode: formData.get('bankCode'),
     accountType: formData.get('accountType'),
     displayName: formData.get('displayName'),
     last4: formData.get('last4'),
@@ -37,7 +40,7 @@ export async function createAccount(_prevState: AddAccountState | undefined, for
   const supabase = await createClient();
   const { error } = await supabase.from('accounts').insert({
     user_id: user.id,
-    bank_code: 'HDFC',
+    bank_code: parsed.data.bankCode,
     account_type: parsed.data.accountType,
     display_name: parsed.data.displayName,
     last4: parsed.data.last4 || null,
@@ -63,6 +66,7 @@ export async function updateAccount(
 
   const parsed = UpdateAccountSchema.safeParse({
     id: formData.get('id'),
+    bankCode: formData.get('bankCode'),
     accountType: formData.get('accountType'),
     displayName: formData.get('displayName'),
     last4: formData.get('last4'),
@@ -76,6 +80,7 @@ export async function updateAccount(
   const { error } = await supabase
     .from('accounts')
     .update({
+      bank_code: parsed.data.bankCode,
       account_type: parsed.data.accountType,
       display_name: parsed.data.displayName,
       last4: parsed.data.last4 || null,

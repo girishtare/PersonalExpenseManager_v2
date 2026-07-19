@@ -8,12 +8,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { BANK_CODES, BANK_LABELS } from '@/lib/banks';
 import { createAccount, updateAccount, type AddAccountState } from './actions';
 
 const initialState: AddAccountState = {};
 
 interface Account {
   id: string;
+  bank_code: string;
   account_type: string;
   display_name: string;
   last4: string | null;
@@ -30,14 +32,18 @@ export function AddAccountForm({ account }: { account?: Account }) {
         {account && <input type="hidden" name="id" value={account.id} />}
 
         <div className="flex flex-wrap items-end gap-3">
-          <div className="flex min-w-[120px] flex-1 flex-col gap-1.5">
-            <Label>Bank</Label>
-            <Select items={{ HDFC: 'HDFC Bank' }} defaultValue="HDFC" disabled>
-              <SelectTrigger className="w-full">
+          <div className="flex min-w-[160px] flex-1 flex-col gap-1.5">
+            <Label htmlFor="bankCode">Bank</Label>
+            <Select name="bankCode" items={BANK_LABELS} defaultValue={account?.bank_code ?? 'HDFC'} required>
+              <SelectTrigger id="bankCode" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="HDFC">HDFC Bank</SelectItem>
+                {BANK_CODES.map((code) => (
+                  <SelectItem key={code} value={code}>
+                    {BANK_LABELS[code]}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -90,7 +96,6 @@ export function AddAccountForm({ account }: { account?: Account }) {
           </div>
         </div>
 
-        <span className="text-xs text-muted-foreground">More banks coming later.</span>
         {state?.error && <p className="text-sm text-destructive">{state.error}</p>}
       </Card>
     </form>
