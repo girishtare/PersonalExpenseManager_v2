@@ -29,6 +29,12 @@ function parseLongDate(s: string): string {
   return `${year}-${month}-${day.padStart(2, '0')}`;
 }
 
+/** "09-05-2025" (DD-MM-YYYY, 4-digit year) -> "2025-05-09". */
+function parseNumericDate(s: string): string {
+  const [day, month, year] = s.split('-');
+  return `${year}-${month}-${day}`;
+}
+
 function parseAmount(s: string): number {
   return Number(s.replace(/,/g, ''));
 }
@@ -65,6 +71,21 @@ const OLD_UPI_REF_RE = /UPI\s+transaction\s+reference\s+number\s+is\s+(\d+)/i;
 
 const OLD_CARD_DEBIT_RE =
   /Rs\.?\s*([\d,]+\.\d{2})\s+is\s+debited\s+from\s+your\s+HDFC\s+Bank\s+Credit\s+Card\s+ending\s+(\d{4})\s+towards\s+([\s\S]+?)\s+on\s+(\d{1,2}\s+[A-Za-z]{3},?\s+\d{4})/i;
+
+// A third, entirely separate card template ("point of sale" style, sent at swipe time rather
+// than the other two which read more like a statement-line notice) - found via a live Gmail
+// audit spanning years across all three connected mailboxes, none of which the two regexes
+// above ever matched. No parentheses, "Thank you for using..." phrasing, numeric DD-MM-YYYY date
+// (not the 2-digit-year short form or the "D Mon YYYY" long form used elsewhere in this file).
+const CARD_USAGE_RE =
+  /Thank\s+you\s+for\s+using\s+your\s+HDFC\s+Bank\s+Credit\s+Card\s+ending\s+(\d{4})\s+for\s+Rs\.?\s*([\d,]+\.\d{2})\s+at\s+([\s\S]+?)\s+on\s+(\d{2}-\d{2}-\d{4})/i;
+
+// A newer wording of the same point-of-sale template (currently the live one HDFC sends as of
+// mid-2026): "...ending in 2834 .You made a transaction of Rs. 1257.00 at MERCHANT on DATE".
+const CARD_USAGE_RE_V2 =
+  /Thank\s+you\s+for\s+using\s+your\s+HDFC\s+Bank\s+Credit\s+Card\s+ending\s+in\s+(\d{4})[\s.]*You\s+made\s+a\s+transaction\s+of\s+Rs\.?\s*([\d,]+\.\d{2})\s+at\s+([\s\S]+?)\s+on\s+(\d{2}-\d{2}-\d{4})/i;
+
+const CARD_USAGE_AUTH_RE = /Authorization\s+code:?-?\s*(\d+)/i;
 
 /**
  * Recognizes the small set of HDFC InstaAlert email templates that represent a completed
@@ -125,6 +146,20 @@ export function parseHdfcAlertEmail(bodyText: string): ParsedAlert | null {
       last4,
       descriptionRaw: `UPI - ${merchant.trim()}`,
       referenceNo: ref?.[1],
+    };
+  }
+
+  const cardUsage = bodyText.match(CARD_USAGE_RE) ?? bodyText.match(CARD_USAGE_RE_V2);
+  if (cardUsage) {
+    const [, last4, amountStr, merchant, dateStr] = cardUsage;
+    const auth = bodyText.match(CARD_USAGE_AUTH_RE);
+    return {
+      txnDate: parseNumericDate(dateStr),
+      amount: parseAmount(amountStr),
+      direction: 'debit',
+      last4,
+      descriptionRaw: `Card - ${merchant.trim()}`,
+      referenceNo: auth?.[1],
     };
   }
 

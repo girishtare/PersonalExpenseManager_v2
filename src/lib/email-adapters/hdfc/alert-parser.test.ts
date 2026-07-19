@@ -130,6 +130,49 @@ Please find the transaction details below:
     expect(parseHdfcAlertEmail(body)).toBeNull();
   });
 
+  it('parses a point-of-sale card usage alert ("Thank you for using...")', () => {
+    const body = `Dear Card Member,
+
+Thank you for using your HDFC Bank Credit Card ending 2834 for Rs 3000.00 at SOME FUEL STATION on 09-05-2025 17:19:24. Authorization code:- 085488
+
+After the above transaction, the available balance on your card is Rs 922413.00 and the total outstanding is Rs 258587.00.
+
+For more details on this transaction please visit HDFC Bank MyCards.`;
+
+    expect(parseHdfcAlertEmail(body)).toEqual({
+      txnDate: '2025-05-09',
+      amount: 3000.0,
+      direction: 'debit',
+      last4: '2834',
+      descriptionRaw: 'Card - SOME FUEL STATION',
+      referenceNo: '085488',
+    });
+  });
+
+  it('parses a point-of-sale card usage alert (newer "You made a transaction" wording)', () => {
+    const body = `Dear Customer,
+Greetings from HDFC Bank.
+Thank you for using your HDFC Bank Credit Card ending in 2834 .You made a transaction of Rs. 1257.00 at RAZ*Swiggy on 03-07-2026 18:45:10 .
+ Authorization code: 075327
+ Important Note:
+If you did not do this transaction, please act immediately.`;
+
+    expect(parseHdfcAlertEmail(body)).toEqual({
+      txnDate: '2026-07-03',
+      amount: 1257.0,
+      direction: 'debit',
+      last4: '2834',
+      descriptionRaw: 'Card - RAZ*Swiggy',
+      referenceNo: '075327',
+    });
+  });
+
+  it('ignores an OTP notice (not a completed transaction)', () => {
+    const body = `OTP is 396930 for txn of INR 1000.00 at HDFC BANK L on HDFC Bank card ending 2834. Valid till 08:18. Do not share OTP for security reasons`;
+
+    expect(parseHdfcAlertEmail(body)).toBeNull();
+  });
+
   it('handles amounts with thousands separators', () => {
     const body = `Rs.1,50,000.00 is debited from your account ending 5749 towards VPA
 someone@bank (BIG PURCHASE STORE) on 01-01-26.
