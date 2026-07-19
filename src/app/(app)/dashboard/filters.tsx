@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DateRangePicker, toDateKey } from '@/components/date-range-picker';
@@ -9,17 +10,14 @@ interface Account {
   display_name: string;
 }
 
-/** Last 24 calendar months (most recent first), as "jump to this month" quick-select options. */
-function monthOptions(): { value: string; label: string }[] {
-  const now = new Date();
-  return Array.from({ length: 24 }, (_, i) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    return {
-      value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-      label: d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
-    };
-  });
-}
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+// Deliberately generous - bank statement imports (as opposed to the Gmail alert sync, which
+// can only ever reach as far back as the mailbox has alert emails) can carry much older data.
+const YEARS_BACK = 30;
 
 export function DashboardFilters({
   accounts,
@@ -45,10 +43,10 @@ export function DashboardFilters({
   }
 
   const today = new Date();
+  const [jumpMonth, setJumpMonth] = useState(today.getMonth() + 1);
+  const [jumpYear, setJumpYear] = useState(today.getFullYear());
 
-  function jumpToMonth(value: string) {
-    if (!value) return;
-    const [year, month] = value.split('-').map(Number);
+  function jumpTo(year: number, month: number) {
     const monthStart = new Date(year, month - 1, 1);
     const monthEnd = new Date(year, month, 0);
     const clampedEnd = monthEnd > today ? today : monthEnd;
@@ -59,14 +57,50 @@ export function DashboardFilters({
     <div className="flex flex-wrap items-end gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm">
       <div className="flex flex-col gap-1.5">
         <span className="text-xs text-muted-foreground">Jump to month</span>
-        <Select<string> items={monthOptions()} onValueChange={(value) => value && jumpToMonth(value)}>
-          <SelectTrigger className="w-44">
-            <SelectValue placeholder="Select month..." />
+        <Select<string>
+          items={MONTH_NAMES.map((name, i) => ({ value: String(i + 1), label: name }))}
+          value={String(jumpMonth)}
+          onValueChange={(value) => {
+            if (!value) return;
+            const month = Number(value);
+            setJumpMonth(month);
+            jumpTo(jumpYear, month);
+          }}
+        >
+          <SelectTrigger className="w-32">
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {monthOptions().map((m) => (
-              <SelectItem key={m.value} value={m.value}>
-                {m.label}
+            {MONTH_NAMES.map((name, i) => (
+              <SelectItem key={name} value={String(i + 1)}>
+                {name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <span className="text-xs text-muted-foreground">Year</span>
+        <Select<string>
+          items={Array.from({ length: YEARS_BACK }, (_, i) => {
+            const y = today.getFullYear() - i;
+            return { value: String(y), label: String(y) };
+          })}
+          value={String(jumpYear)}
+          onValueChange={(value) => {
+            if (!value) return;
+            const year = Number(value);
+            setJumpYear(year);
+            jumpTo(year, jumpMonth);
+          }}
+        >
+          <SelectTrigger className="w-24">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Array.from({ length: YEARS_BACK }, (_, i) => today.getFullYear() - i).map((y) => (
+              <SelectItem key={y} value={String(y)}>
+                {y}
               </SelectItem>
             ))}
           </SelectContent>
