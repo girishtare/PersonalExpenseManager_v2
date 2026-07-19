@@ -1,5 +1,6 @@
 import { parseHdfcAlertEmail } from './hdfc/alert-parser';
 import { parseSaraswatAlertEmail } from './saraswat/alert-parser';
+import { parseJupiterAlertEmail } from './jupiter/alert-parser';
 import type { EmailAdapter, ParsedAlert } from './types';
 
 /**
@@ -10,6 +11,7 @@ import type { EmailAdapter, ParsedAlert } from './types';
 const ADAPTERS: EmailAdapter[] = [
   { bankCode: 'HDFC', senders: ['alerts@hdfcbank.bank.in', 'alerts@hdfcbank.net'], parse: parseHdfcAlertEmail },
   { bankCode: 'SARASWAT', senders: ['alert@saraswatbank.co.in'], parse: parseSaraswatAlertEmail },
+  { bankCode: 'JUPITER', senders: ['noreply@jupiter.money', 'alerts@jupiter.money', 'updates@jupiter.money'], parse: parseJupiterAlertEmail },
 ];
 
 /** Every sender address across every registered adapter - used to build the Gmail search query. */
