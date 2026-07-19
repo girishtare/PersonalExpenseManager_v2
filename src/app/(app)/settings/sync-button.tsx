@@ -1,108 +1,99 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { getConnectionSyncStatus, type SyncStatus } from './actions';
 
-interface SyncResponse {
-  done: boolean;
-  nextPageToken: string | null;
-  resultSizeEstimate: number;
-  processedThisBatch: number;
-  imported: number;
-  duplicates: number;
-  skipped: number;
-  unmatchedAccount: number;
-  error?: string;
-}
+const POLL_INTERVAL_MS = 2000;
 
-interface Totals {
-  processed: number;
-  total: number;
-  imported: number;
-  duplicates: number;
-  skipped: number;
-  unmatchedAccount: number;
-}
-
-const ZERO_TOTALS: Totals = { processed: 0, total: 0, imported: 0, duplicates: 0, skipped: 0, unmatchedAccount: 0 };
-
-export function SyncButton({ connectionId }: { connectionId: string }) {
+export function SyncButton({ connectionId, initialStatus }: { connectionId: string; initialStatus: SyncStatus }) {
   const router = useRouter();
-  const [syncing, setSyncing] = useState(false);
-  const [totals, setTotals] = useState<Totals | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState(initialStatus);
+  const [startError, setStartError] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  async function runSync() {
-    setSyncing(true);
-    setError(null);
-    let running: Totals = ZERO_TOTALS;
-    setTotals(running);
-
-    let pageToken: string | undefined;
-    try {
-      for (;;) {
-        const res = await fetch('/api/gmail/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ connectionId, pageToken }),
-        });
-        const data: SyncResponse = await res.json();
-        if (!res.ok) {
-          setError(data.error ?? 'Sync failed.');
-          break;
-        }
-
-        running = {
-          processed: running.processed + data.processedThisBatch,
-          total: Math.max(data.resultSizeEstimate, running.processed + data.processedThisBatch),
-          imported: running.imported + data.imported,
-          duplicates: running.duplicates + data.duplicates,
-          skipped: running.skipped + data.skipped,
-          unmatchedAccount: running.unmatchedAccount + data.unmatchedAccount,
-        };
-        setTotals(running);
-
-        if (data.done) break;
-        pageToken = data.nextPageToken ?? undefined;
-      }
-    } catch {
-      setError('Something went wrong while syncing. Please try again.');
-    } finally {
-      setSyncing(false);
-      router.refresh();
+  function stopPolling() {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
     }
   }
 
-  const pct = totals && totals.total > 0 ? Math.min(100, Math.round((totals.processed / totals.total) * 100)) : 0;
+  function startPolling() {
+    stopPolling();
+    pollRef.current = setInterval(async () => {
+      const latest = await getConnectionSyncStatus(connectionId);
+      if (!latest) return;
+      setStatus(latest);
+      if (latest.status !== 'running') {
+        stopPolling();
+        router.refresh();
+      }
+    }, POLL_INTERVAL_MS);
+  }
+
+  useEffect(() => {
+    // The sync itself runs server-side regardless of this page being open (see
+    // /api/gmail/sync's self-chaining) - if it was already running when this page loaded
+    // (e.g. the user navigated away and came back), just resume watching it.
+    if (initialStatus.status === 'running') startPolling();
+    return stopPolling;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleClick() {
+    setStartError(null);
+    setStatus((s) => ({ ...s, status: 'running', processed: 0, total: 0 }));
+    try {
+      const res = await fetch('/api/gmail/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ connectionId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setStartError(data.error ?? 'Sync failed.');
+        setStatus((s) => ({ ...s, status: 'error' }));
+        return;
+      }
+      startPolling();
+    } catch {
+      setStartError('Something went wrong while starting the sync. Please try again.');
+      setStatus((s) => ({ ...s, status: 'error' }));
+    }
+  }
+
+  const syncing = status.status === 'running';
+  const pct = status.total > 0 ? Math.min(100, Math.round((status.processed / status.total) * 100)) : 0;
 
   return (
     <div className="flex flex-col items-end gap-1.5">
-      <Button type="button" size="sm" variant="outline" disabled={syncing} onClick={runSync}>
+      <Button type="button" size="sm" variant="outline" disabled={syncing} onClick={handleClick}>
         {syncing ? 'Syncing…' : 'Sync now'}
       </Button>
 
-      {syncing && totals && (
+      {syncing && (
         <div className="w-48">
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
             <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} />
           </div>
           <p className="mt-1 text-right text-xs text-muted-foreground">
-            {totals.processed} of ~{totals.total}
+            {status.processed} of ~{status.total}
           </p>
         </div>
       )}
 
-      {!syncing && totals && !error && (
+      {!syncing && status.status === 'idle' && (status.imported || status.duplicates || status.skipped || status.unmatchedAccount) ? (
         <p className="text-xs text-muted-foreground">
-          Imported {totals.imported}
-          {totals.duplicates > 0 && ` · ${totals.duplicates} already had`}
-          {totals.skipped > 0 && ` · ${totals.skipped} not recognized`}
-          {totals.unmatchedAccount > 0 && ` · ${totals.unmatchedAccount} unknown account`}
+          Imported {status.imported}
+          {status.duplicates > 0 && ` · ${status.duplicates} already had`}
+          {status.skipped > 0 && ` · ${status.skipped} not recognized`}
+          {status.unmatchedAccount > 0 && ` · ${status.unmatchedAccount} unknown account`}
         </p>
-      )}
+      ) : null}
 
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {(startError || status.error) && <p className="text-xs text-destructive">{startError ?? status.error}</p>}
     </div>
   );
 }

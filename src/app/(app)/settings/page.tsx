@@ -26,7 +26,9 @@ export default async function SettingsPage({
 
   const { data: connections } = await supabase
     .from('email_connections')
-    .select('id, email_address, role, last_synced_at')
+    .select(
+      'id, email_address, role, last_synced_at, sync_status, sync_processed, sync_total, sync_imported, sync_duplicates, sync_skipped, sync_unmatched_account, sync_error'
+    )
     .eq('user_id', user.id);
 
   const connectionByRole = new Map((connections ?? []).map((c) => [c.role, c]));
@@ -66,15 +68,30 @@ export default async function SettingsPage({
                   {connection && (
                     <p className="mt-1 text-xs text-muted-foreground">
                       Connected as <span className="font-medium text-foreground">{connection.email_address}</span>
-                      {connection.last_synced_at
-                        ? ` · last synced ${new Date(connection.last_synced_at).toLocaleString('en-IN')}`
-                        : ' · not synced yet'}
+                      {connection.sync_status === 'running'
+                        ? ' · syncing…'
+                        : connection.last_synced_at
+                          ? ` · last synced ${new Date(connection.last_synced_at).toLocaleString('en-IN')}`
+                          : ' · not synced yet'}
                     </p>
                   )}
                 </div>
                 {connection ? (
                   <div className="flex items-start gap-2">
-                    <SyncButton connectionId={connection.id} />
+                    <SyncButton
+                      connectionId={connection.id}
+                      initialStatus={{
+                        status: connection.sync_status,
+                        processed: connection.sync_processed,
+                        total: connection.sync_total,
+                        imported: connection.sync_imported,
+                        duplicates: connection.sync_duplicates,
+                        skipped: connection.sync_skipped,
+                        unmatchedAccount: connection.sync_unmatched_account,
+                        error: connection.sync_error,
+                        lastSyncedAt: connection.last_synced_at,
+                      }}
+                    />
                     <DisconnectButton connectionId={connection.id} />
                   </div>
                 ) : (
