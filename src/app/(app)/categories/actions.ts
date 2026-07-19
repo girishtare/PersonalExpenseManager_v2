@@ -167,18 +167,23 @@ export async function createRule(_prevState: AddRuleState | undefined, formData:
 export async function updateRuleCategory(
   rule: { id: string; userId: string | null; pattern: string; matchType: string; direction: string | null; priority: number },
   categoryId: string
-) {
+): Promise<CategoryActionState> {
   const user = await requireOwnerUser();
   const supabase = await createClient();
 
   if (rule.userId) {
     // Your own rule - update it directly (RLS also scopes this to user_id = auth.uid()).
-    await supabase.from('categorization_rules').update({ category_id: categoryId }).eq('id', rule.id).eq('user_id', user.id);
+    const { error } = await supabase
+      .from('categorization_rules')
+      .update({ category_id: categoryId })
+      .eq('id', rule.id)
+      .eq('user_id', user.id);
+    if (error) return { error: error.message };
   } else {
     // System rules are shared and read-only (RLS blocks writes to user_id-null rows), so
     // "editing" one clones it as your own override at a higher priority instead - same
     // pattern as the "always categorize like this" override from the transactions list.
-    await supabase.from('categorization_rules').insert({
+    const { error } = await supabase.from('categorization_rules').insert({
       user_id: user.id,
       category_id: categoryId,
       pattern: rule.pattern,
@@ -187,15 +192,19 @@ export async function updateRuleCategory(
       priority: Math.max(1, rule.priority - 1),
       created_from_override: true,
     });
+    if (error) return { error: error.message };
   }
 
   revalidatePath('/categories');
+  return {};
 }
 
-export async function deleteRule(ruleId: string) {
+export async function deleteRule(ruleId: string): Promise<CategoryActionState> {
   const user = await requireOwnerUser();
   const supabase = await createClient();
   // RLS also scopes deletes to user_id = auth.uid(), so this is a no-op against system rules.
-  await supabase.from('categorization_rules').delete().eq('id', ruleId).eq('user_id', user.id);
+  const { error } = await supabase.from('categorization_rules').delete().eq('id', ruleId).eq('user_id', user.id);
+  if (error) return { error: error.message };
   revalidatePath('/categories');
+  return {};
 }

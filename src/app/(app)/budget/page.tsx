@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { parseDateKey, projectMonthEnd, toDateKey } from '@/lib/dashboard/period';
+import { fetchAllRows } from '@/lib/supabase/fetch-all';
 import { BudgetTable, type BudgetRow } from './budget-table';
 
 const MONTH_KEY_RE = /^\d{4}-\d{2}$/;
@@ -34,15 +35,19 @@ export default async function BudgetPage({ searchParams }: { searchParams: Promi
   const nextMonthKey = monthKeyOf(nextMonthDate);
   const canGoNext = nextMonthKey <= todayMonthKey;
 
-  const [{ data: categoryRows }, { data: budgetRows }, { data: monthToDateRows }] = await Promise.all([
+  const [{ data: categoryRows }, { data: budgetRows }, monthToDateRows] = await Promise.all([
     supabase.from('categories').select('id, name, txn_type').or(`user_id.eq.${user.id},user_id.is.null`).order('name', { ascending: true }),
     supabase.from('budgets').select('category_id, monthly_amount, effective_from').eq('user_id', user.id),
-    supabase
-      .from('transactions')
-      .select('amount, direction, category_id')
-      .eq('user_id', user.id)
-      .gte('txn_date', toDateKey(viewedMonthStart))
-      .lte('txn_date', toDateKey(viewedEnd)),
+    // Paged - a single busy month can exceed PostgREST's silent 1000-row cap, which would
+    // understate "spent" here with no error.
+    fetchAllRows(() =>
+      supabase
+        .from('transactions')
+        .select('amount, direction, category_id')
+        .eq('user_id', user.id)
+        .gte('txn_date', toDateKey(viewedMonthStart))
+        .lte('txn_date', toDateKey(viewedEnd))
+    ),
   ]);
 
   // Resolve the latest budget row per category as of the viewed month (a budget can change over

@@ -1,6 +1,7 @@
 import { revalidatePath } from 'next/cache';
 import { requireOwnerUser } from '@/lib/auth/dal';
 import { createClient } from '@/lib/supabase/server';
+import { fetchAllRows } from '@/lib/supabase/fetch-all';
 import { categorizeTransaction, getUncategorizedCategoryId, loadActiveRules } from '@/lib/categorization/engine';
 
 export const maxDuration = 60;
@@ -26,16 +27,11 @@ export async function POST() {
         const uncategorizedId = await getUncategorizedCategoryId(supabase);
 
         controller.enqueue(encodeLine({ status: 'Loading transactions...' }));
-        const { data: transactions, error } = await supabase
-          .from('transactions')
-          .select('id, description_raw, direction')
-          .eq('user_id', user.id)
-          .eq('is_manual_override', false);
-
-        if (error || !transactions) {
-          controller.enqueue(encodeLine({ error: error?.message ?? 'Could not load transactions' }));
-          return;
-        }
+        // Paged - a bare select is silently capped at PostgREST's 1000-row limit, which would
+        // leave every transaction past the first 1000 untouched by a recalculation.
+        const transactions: { id: string; description_raw: string; direction: 'debit' | 'credit' }[] = await fetchAllRows(() =>
+          supabase.from('transactions').select('id, description_raw, direction').eq('user_id', user.id).eq('is_manual_override', false)
+        );
 
         const total = transactions.length;
         let updatedCount = 0;

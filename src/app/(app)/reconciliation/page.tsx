@@ -24,15 +24,18 @@ export default async function ReconciliationPage() {
     .ilike('name', 'CC Bill Payment');
   const categoryIds = (billPaymentCategories ?? []).map((c) => c.id);
 
-  const [{ data: paymentRows }, { data: statementRows }] = await Promise.all([
+  const [paymentRows, { data: statementRows }] = await Promise.all([
     categoryIds.length
-      ? supabase
-          .from('transactions')
-          .select('id, txn_date, amount, description_raw')
-          .eq('user_id', user.id)
-          .in('category_id', categoryIds)
-          .order('txn_date', { ascending: false })
-      : Promise.resolve({ data: [] }),
+      ? // Paged for the same reason as statementTxns below - the silent 1000-row cap.
+        fetchAllRows(() =>
+          supabase
+            .from('transactions')
+            .select('id, txn_date, amount, description_raw')
+            .eq('user_id', user.id)
+            .in('category_id', categoryIds)
+            .order('txn_date', { ascending: false })
+        )
+      : Promise.resolve([]),
     supabase
       .from('statements')
       .select(
