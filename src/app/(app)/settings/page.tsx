@@ -13,6 +13,11 @@ const ROLES = [
     title: 'Historical',
     description: 'The old Gmail address that received alerts before you switched, for backfilling past transactions.',
   },
+  {
+    role: 'pre_historical' as const,
+    title: 'Pre-Historical',
+    description: 'An even older Gmail address that received HDFC alerts before the "Historical" one, for backfilling further back.',
+  },
 ];
 
 export default async function SettingsPage({

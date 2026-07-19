@@ -10,8 +10,8 @@ export async function GET(request: Request) {
   await requireOwnerUser();
   const { searchParams, origin } = new URL(request.url);
   const role = searchParams.get('role');
-  if (role !== 'historical' && role !== 'live') {
-    return NextResponse.json({ error: 'role must be "historical" or "live"' }, { status: 400 });
+  if (role !== 'historical' && role !== 'live' && role !== 'pre_historical') {
+    return NextResponse.json({ error: 'role must be "historical", "pre_historical", or "live"' }, { status: 400 });
   }
 
   const nonce = randomBytes(16).toString('hex');

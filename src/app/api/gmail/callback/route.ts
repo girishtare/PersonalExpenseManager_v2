@@ -25,7 +25,7 @@ export async function GET(request: Request) {
   const expectedNonce = cookieStore.get(STATE_COOKIE)?.value;
   cookieStore.delete(STATE_COOKIE);
 
-  if (!code || !nonce || nonce !== expectedNonce || (role !== 'historical' && role !== 'live')) {
+  if (!code || !nonce || nonce !== expectedNonce || (role !== 'historical' && role !== 'live' && role !== 'pre_historical')) {
     return fail(origin, 'invalid_state');
   }
 
