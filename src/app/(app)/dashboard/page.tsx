@@ -109,7 +109,7 @@ function pointsDelta(current: number, previous: number, hasBaseline: boolean): D
   };
 }
 
-export interface TxnRow {
+interface TxnRow {
   amount: number;
   txn_type_override: TxnType | null;
   category_id: string;

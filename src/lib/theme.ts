@@ -3,10 +3,6 @@ export type Theme = 'light' | 'dark';
 const STORAGE_KEY = 'theme';
 const THEME_CHANGE_EVENT = 'themechange';
 
-export function getSystemTheme(): Theme {
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}
-
 export function getCurrentTheme(): Theme {
   return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
 }

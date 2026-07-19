@@ -3,7 +3,7 @@ import type { AccountType, ParsedStatement, RawParsedTransaction } from './types
 /** Matches dd/mm/yy, dd/mm/yyyy, dd-mm-yy, dd-mm-yyyy. */
 const DATE_RE = /^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$/;
 
-export function isLikelyDate(value: string | undefined): boolean {
+function isLikelyDate(value: string | undefined): boolean {
   return !!value && DATE_RE.test(value.trim());
 }
 
@@ -54,7 +54,7 @@ function findColumn(headerRow: string[], aliases: RegExp[]): number {
  * reduce to this same shape before reaching here). HDFC NetBanking exports typically have a
  * few metadata rows before the real header, so we scan for it rather than assuming row 0.
  */
-export function buildParsedStatementFromRows(rows: string[][]): ParsedStatement {
+function buildParsedStatementFromRows(rows: string[][]): ParsedStatement {
   const headerIdx = rows.findIndex(
     (row) =>
       findColumn(row, HEADER_ALIASES.narration) !== -1 &&

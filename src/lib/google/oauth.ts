@@ -1,7 +1,7 @@
 import 'server-only';
 import { OAuth2Client } from 'google-auth-library';
 
-export const GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
+const GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
 
 export function createOAuthClient(redirectUri: string) {
   return new OAuth2Client(process.env.GMAIL_OAUTH_CLIENT_ID, process.env.GMAIL_OAUTH_CLIENT_SECRET, redirectUri);

@@ -11,7 +11,7 @@ export interface CategorizationRule {
   user_id: string | null;
 }
 
-export function ruleMatches(rule: CategorizationRule, descriptionNormalized: string, direction: TxnDirection): boolean {
+function ruleMatches(rule: CategorizationRule, descriptionNormalized: string, direction: TxnDirection): boolean {
   if (rule.direction && rule.direction !== direction) return false;
 
   const pattern = rule.pattern.toLowerCase();
