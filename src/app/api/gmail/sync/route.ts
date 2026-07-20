@@ -58,12 +58,15 @@ async function processBatch(supabase: SupabaseClient, connectionId: string, page
     (accounts ?? []).filter((a) => a.last4).map((a) => [`${a.bank_code}:${a.last4}`, a.id])
   );
 
-  let imported = 0;
-  let duplicates = 0;
   let skipped = 0;
   let unmatchedAccount = 0;
-  const rowsToInsert = [];
 
+  // First pass: fetch + parse every message in the batch (Gmail API calls only, no DB writes
+  // yet) so the dedup check below can be done as a single batched query instead of one
+  // round-trip per message - a batch of 20 previously meant up to 20 sequential SELECTs, which
+  // was heavy enough traffic against Supabase to visibly slow down other pages while a sync (or
+  // several self-chained syncs) was running.
+  const candidates: { messageId: string; parsed: NonNullable<ReturnType<typeof parseAlertEmail>>; accountId: string }[] = [];
   for (const messageId of list.ids) {
     const { bodyText } = await getMessage({ accessToken, messageId });
     const parsed = parseAlertEmail(bodyText);
@@ -78,19 +81,38 @@ async function processBatch(supabase: SupabaseClient, connectionId: string, page
       continue;
     }
 
-    // Fuzzy cross-source dedup - a statement upload may already have this exact transaction
-    // under completely different narration text, so an exact-hash check alone (below) can't
-    // catch it. Same account/date/amount/direction is treated as "already have this".
-    const { data: existing } = await supabase
+    candidates.push({ messageId, parsed, accountId });
+  }
+
+  // Fuzzy cross-source dedup - a statement upload may already have this exact transaction under
+  // completely different narration text, so an exact-hash check alone (below) can't catch it.
+  // Same account/date/amount/direction is treated as "already have this". Numeric columns come
+  // back from Supabase as strings, so both sides are normalized through toFixed(2) before
+  // comparing - naive string interpolation of a JS number would mismatch "337.5" against the
+  // database's "337.50".
+  const dedupeKey = (accountId: string, txnDate: string, amount: number, direction: string) =>
+    `${accountId}|${txnDate}|${amount.toFixed(2)}|${direction}`;
+
+  let existingKeys = new Set<string>();
+  if (candidates.length > 0) {
+    const accountIds = [...new Set(candidates.map((c) => c.accountId))];
+    const txnDates = [...new Set(candidates.map((c) => c.parsed.txnDate))];
+    const { data: existingRows } = await supabase
       .from('transactions')
-      .select('id')
-      .eq('account_id', accountId)
-      .eq('txn_date', parsed.txnDate)
-      .eq('amount', parsed.amount)
-      .eq('direction', parsed.direction)
-      .limit(1)
-      .maybeSingle();
-    if (existing) {
+      .select('account_id, txn_date, amount, direction')
+      .in('account_id', accountIds)
+      .in('txn_date', txnDates);
+    existingKeys = new Set(
+      (existingRows ?? []).map((r) => dedupeKey(r.account_id, r.txn_date, Number(r.amount), r.direction))
+    );
+  }
+
+  let imported = 0;
+  let duplicates = 0;
+  const rowsToInsert = [];
+
+  for (const { messageId, parsed, accountId } of candidates) {
+    if (existingKeys.has(dedupeKey(accountId, parsed.txnDate, parsed.amount, parsed.direction))) {
       duplicates++;
       continue;
     }
