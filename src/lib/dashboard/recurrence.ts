@@ -6,6 +6,11 @@ export interface RecurrenceTxn {
   amount: number;
   direction: 'debit' | 'credit';
   description_raw: string;
+  /** Category name, when known - "Bills & Utilities" gets the amount-variance rule relaxed
+   * below, since a genuinely recurring electricity/mobile bill still varies month to month by
+   * usage, unlike an EMI/SIP/subscription where a varying amount means it ISN'T the same
+   * recurring payment. */
+  categoryName?: string | null;
 }
 
 export interface UpcomingDebit {
@@ -16,6 +21,9 @@ export interface UpcomingDebit {
   occurrences: number;
   lastAmount: number;
   lastDate: string;
+  /** True when expectedAmount is an average over varying real amounts (bills & utilities)
+   * rather than a consistent fixed amount (EMI, subscription, ...). */
+  isEstimate: boolean;
 }
 
 const AMOUNT_TOLERANCE = 0.05;
@@ -24,14 +32,17 @@ const MIN_GAP_DAYS = 20;
 const MAX_GAP_DAYS = 40;
 /** If the predicted next occurrence is already this many days in the past, treat the pattern as stopped rather than upcoming. */
 const STALE_AFTER_DAYS = 10;
+const VARIABLE_AMOUNT_CATEGORY = 'Bills & Utilities';
 
 /**
- * Detects recurring debits (EMIs, SIPs, subscriptions, ...) purely from the transaction data
- * pattern - same "core" merchant/counterparty text (see reduceDescription), amount consistent
- * within +/-5%, and roughly monthly spacing across at least 3 occurrences in 3 distinct
- * calendar months. Deliberately not filtered by category/txn_type: an EMI is expense-type and a
- * SIP is investment-type, so filtering to one would miss the other - "debit direction" is the
- * only filter, matching the card's name.
+ * Detects recurring debits (EMIs, SIPs, subscriptions, bills, ...) purely from the transaction
+ * data pattern - same "core" merchant/counterparty text (see reduceDescription) and roughly
+ * monthly spacing across at least 3 occurrences in 3 distinct calendar months. Deliberately not
+ * filtered by category/txn_type generally: an EMI is expense-type and a SIP is investment-type,
+ * so filtering to one would miss the other - "debit direction" is the only filter, matching the
+ * card's name. Amount consistency (+/-5%) is required EXCEPT for "Bills & Utilities", where the
+ * average is used as the expected amount instead, since usage-based bills are still recurring
+ * despite varying.
  */
 export function detectRecurringDebits(transactions: RecurrenceTxn[], asOf: Date = new Date()): UpcomingDebit[] {
   const groups = new Map<string, RecurrenceTxn[]>();
@@ -54,9 +65,16 @@ export function detectRecurringDebits(transactions: RecurrenceTxn[], asOf: Date 
     const monthsCovered = new Set(sorted.map((t) => t.txn_date.slice(0, 7)));
     if (monthsCovered.size < MIN_OCCURRENCES) continue;
 
+    const lastTxn = sorted[sorted.length - 1];
+
     const amounts = sorted.map((t) => t.amount);
     const meanAmount = amounts.reduce((sum, a) => sum + a, 0) / amounts.length;
-    const amountsConsistent = amounts.every((a) => Math.abs(a - meanAmount) <= meanAmount * AMOUNT_TOLERANCE);
+    // The most recent occurrence's category is the current, presumably-accurate one to check -
+    // a group is always the same counterparty (same reduceDescription key), so its category
+    // shouldn't normally shift, but if it ever did, "current" is the more useful signal anyway.
+    const isVariableAmount = lastTxn.categoryName === VARIABLE_AMOUNT_CATEGORY;
+    const amountsConsistent =
+      isVariableAmount || amounts.every((a) => Math.abs(a - meanAmount) <= meanAmount * AMOUNT_TOLERANCE);
     if (!amountsConsistent) continue;
 
     const gapsInDays: number[] = [];
@@ -68,19 +86,19 @@ export function detectRecurringDebits(transactions: RecurrenceTxn[], asOf: Date 
     const monthlyLike = gapsInDays.every((g) => g >= MIN_GAP_DAYS && g <= MAX_GAP_DAYS);
     if (!monthlyLike) continue;
 
-    const last = sorted[sorted.length - 1];
-    const expectedDate = shiftByMonths(parseDateKey(last.txn_date), 1);
+    const expectedDate = shiftByMonths(parseDateKey(lastTxn.txn_date), 1);
     const daysPastExpected = (asOf.getTime() - expectedDate.getTime()) / 86_400_000;
     if (daysPastExpected > STALE_AFTER_DAYS) continue;
 
     results.push({
       descriptionKey: key,
-      sampleDescription: last.description_raw,
+      sampleDescription: lastTxn.description_raw,
       expectedAmount: Math.round(meanAmount * 100) / 100,
       expectedDate: toDateKey(expectedDate),
       occurrences: sorted.length,
-      lastAmount: last.amount,
-      lastDate: last.txn_date,
+      lastAmount: lastTxn.amount,
+      lastDate: lastTxn.txn_date,
+      isEstimate: isVariableAmount,
     });
   }
 

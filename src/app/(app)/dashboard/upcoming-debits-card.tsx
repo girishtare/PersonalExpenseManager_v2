@@ -29,7 +29,10 @@ export function UpcomingDebitsCard({ debits }: { debits: UpcomingDebit[] }) {
               Expected {formatDate(d.expectedDate)} &middot; seen {d.occurrences} times
             </p>
           </div>
-          <span className="shrink-0 text-sm font-medium tabular-nums">{formatCurrency(d.expectedAmount)}</span>
+          <span className="shrink-0 text-right text-sm font-medium tabular-nums">
+            {formatCurrency(d.expectedAmount)}
+            {d.isEstimate && <span className="block text-[10px] font-normal text-muted-foreground">avg, varies</span>}
+          </span>
         </li>
       ))}
     </ul>

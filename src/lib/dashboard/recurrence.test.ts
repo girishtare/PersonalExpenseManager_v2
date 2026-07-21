@@ -3,8 +3,14 @@ import { detectRecurringDebits, type RecurrenceTxn } from './recurrence';
 
 const ASOF = new Date(2026, 6, 8); // 2026-07-08
 
-function txn(txn_date: string, amount: number, description_raw: string, direction: 'debit' | 'credit' = 'debit'): RecurrenceTxn {
-  return { txn_date, amount, description_raw, direction };
+function txn(
+  txn_date: string,
+  amount: number,
+  description_raw: string,
+  direction: 'debit' | 'credit' = 'debit',
+  categoryName?: string
+): RecurrenceTxn {
+  return { txn_date, amount, description_raw, direction, categoryName };
 }
 
 describe('detectRecurringDebits', () => {
@@ -79,6 +85,45 @@ describe('detectRecurringDebits', () => {
     );
     // predicted next: 2026-02-16, which is > 10 days before ASOF (2026-07-08) - stale.
     expect(result).toHaveLength(0);
+  });
+
+  it('accepts a Bills & Utilities pattern despite amounts varying well past 5% (usage-based), using the average', () => {
+    const result = detectRecurringDebits(
+      [
+        txn('2026-04-05', 1200, 'BSES ELECTRICITY BILL', 'debit', 'Bills & Utilities'),
+        txn('2026-05-05', 2400, 'BSES ELECTRICITY BILL', 'debit', 'Bills & Utilities'),
+        txn('2026-06-05', 1800, 'BSES ELECTRICITY BILL', 'debit', 'Bills & Utilities'),
+      ],
+      ASOF
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].expectedAmount).toBe(1800); // mean of 1200, 2400, 1800
+    expect(result[0].isEstimate).toBe(true);
+  });
+
+  it('still requires monthly-like spacing for a Bills & Utilities pattern', () => {
+    const result = detectRecurringDebits(
+      [
+        txn('2026-01-05', 1200, 'BSES ELECTRICITY BILL', 'debit', 'Bills & Utilities'),
+        txn('2026-02-05', 2400, 'BSES ELECTRICITY BILL', 'debit', 'Bills & Utilities'),
+        txn('2026-02-20', 1800, 'BSES ELECTRICITY BILL', 'debit', 'Bills & Utilities'),
+      ],
+      ASOF
+    );
+    expect(result).toHaveLength(0);
+  });
+
+  it('marks a consistent-amount (non-variable-category) pattern as not an estimate', () => {
+    const result = detectRecurringDebits(
+      [
+        txn('2026-04-16', 7912, 'OFFUS EMI PRIN NB 05', 'debit', 'EMI & Loan Payments'),
+        txn('2026-05-16', 7912, 'OFFUS EMI PRIN NB 05', 'debit', 'EMI & Loan Payments'),
+        txn('2026-06-16', 7912, 'OFFUS EMI PRIN NB 05', 'debit', 'EMI & Loan Payments'),
+      ],
+      ASOF
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].isEstimate).toBe(false);
   });
 
   it('sorts multiple recurring groups by soonest expected date', () => {
