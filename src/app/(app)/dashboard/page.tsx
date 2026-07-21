@@ -12,12 +12,14 @@ import { effectiveTxnType } from '@/lib/transactions/type';
 import { computeMtdBadge, parseDateKey, sameDaysLastMonth, toDateKey, type MtdBadge } from '@/lib/dashboard/period';
 import { fetchAllRows } from '@/lib/supabase/fetch-all';
 import { detectRecurringDebits, type RecurrenceTxn } from '@/lib/dashboard/recurrence';
-import { computeTopMerchants } from '@/lib/dashboard/merchants';
+import { computeTopMerchants, attachMerchantTrend } from '@/lib/dashboard/merchants';
+import { computeCategoryMonthlyTrend } from '@/lib/dashboard/category-trend';
 import { DashboardFilters } from './filters';
 import { MonthlyTrendChart, type MonthlyTrendPoint } from './monthly-trend-chart';
 import { CategoryDonutChart } from './category-donut-chart';
 import { UpcomingDebitsCard } from './upcoming-debits-card';
 import { TopMerchantsTable } from './top-merchants-table';
+import { CategoryTrendChart } from './category-trend-chart';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
@@ -121,7 +123,17 @@ interface TrendTxnRow {
   amount: number;
   txn_date: string;
   txn_type_override: TxnType | null;
-  categories: { txn_type: TxnType }[] | { txn_type: TxnType } | null;
+  category_id: string;
+  description_raw: string;
+  categories: { name: string; txn_type: TxnType }[] | { name: string; txn_type: TxnType } | null;
+}
+
+interface RecurrenceRow {
+  txn_date: string;
+  amount: number;
+  direction: 'debit' | 'credit';
+  description_raw: string;
+  categories: { name: string }[] | { name: string } | null;
 }
 
 export default async function DashboardPage({
@@ -163,7 +175,7 @@ export default async function DashboardPage({
   const trendQuery = () => {
     const q = supabase
       .from('transactions')
-      .select('amount, txn_date, txn_type_override, categories(txn_type)')
+      .select('amount, txn_date, txn_type_override, category_id, description_raw, categories(name, txn_type)')
       .gte('txn_date', toDateKey(twelveMonthsAgo));
     return accountId ? q.eq('account_id', accountId) : q;
   };
@@ -173,7 +185,7 @@ export default async function DashboardPage({
   const recurrenceQuery = () => {
     const q = supabase
       .from('transactions')
-      .select('txn_date, amount, direction, description_raw')
+      .select('txn_date, amount, direction, description_raw, categories(name)')
       .eq('direction', 'debit')
       .gte('txn_date', toDateKey(twelveMonthsAgo))
       .lte('txn_date', toDateKey(today));
@@ -229,18 +241,30 @@ export default async function DashboardPage({
     };
   });
 
-  const upcomingDebits = detectRecurringDebits((recurrenceRows ?? []) as RecurrenceTxn[], today);
+  const recurrenceRowsTyped: RecurrenceTxn[] = ((recurrenceRows ?? []) as RecurrenceRow[]).map((r) => ({
+    txn_date: r.txn_date,
+    amount: Number(r.amount),
+    direction: r.direction,
+    description_raw: r.description_raw,
+    categoryName: categoryOf(r)?.name ?? null,
+  }));
+  const upcomingDebits = detectRecurringDebits(recurrenceRowsTyped, today);
+
+  const categoryMonthlyTrend = computeCategoryMonthlyTrend(trendRowsTyped, monthBuckets);
 
   // "Merchants" means places you spend, not internal transfers/bill payments - a CC Bill
   // Payment would otherwise dominate this table as the single biggest "merchant".
-  const isExpenseRow = (row: TxnRow) => {
+  const isExpenseRow = (row: TxnRow | TrendTxnRow) => {
     const category = categoryOf(row);
     return !!category && effectiveTxnType(row, category) === 'expense';
   };
-  const topMerchants = computeTopMerchants(current.filter(isExpenseRow), previous.filter(isExpenseRow)).map((row) => ({
+  const topMerchantsWithAlias = computeTopMerchants(current.filter(isExpenseRow), previous.filter(isExpenseRow)).map((row) => ({
     ...row,
     name: merchantAliasByKey.get(row.key) ?? row.name,
   }));
+  // Last 6 months (not the full 12 the bar chart uses) - a compact, legible span for an inline
+  // sparkline rather than 12 cramped points.
+  const topMerchants = attachMerchantTrend(topMerchantsWithAlias, trendRowsTyped.filter(isExpenseRow), monthBuckets.slice(-6));
 
   return (
     <main className="flex flex-1 flex-col gap-8 p-8">
@@ -313,6 +337,11 @@ export default async function DashboardPage({
           <CategoryDonutChart data={expenseCategories} />
         </Card>
       </section>
+
+      <Card className="flex flex-col gap-4 p-5">
+        <h2 className="font-medium">Expense by category - last 12 months</h2>
+        <CategoryTrendChart data={categoryMonthlyTrend} />
+      </Card>
 
       <Card className="flex flex-col gap-4 p-5">
         <h2 className="font-medium">Top merchants</h2>
