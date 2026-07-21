@@ -1,4 +1,5 @@
 import { reduceDescription } from '../transactions/similar';
+import type { MonthBucket } from './category-trend';
 
 export interface MerchantTxn {
   description_raw: string;
@@ -11,6 +12,12 @@ export interface MerchantDelta {
   current: number;
   previous: number;
   delta: number;
+}
+
+export interface MerchantTrendTxn {
+  description_raw: string;
+  amount: number;
+  txn_date: string;
 }
 
 /**
@@ -52,4 +59,32 @@ export function computeTopMerchants(current: MerchantTxn[], previous: MerchantTx
   }
 
   return rows.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, limit);
+}
+
+/**
+ * Attaches a per-month spend trend to each of the given merchants, for an inline sparkline -
+ * `trendRows` is expected to already be expense-only (same filter computeTopMerchants' callers
+ * apply before calling it) and to span (at least) the given month buckets. Pre-groups trendRows
+ * into a single pass rather than re-filtering per merchant, since this runs against the same
+ * up-to-12-month dataset the overall trend chart uses.
+ */
+export function attachMerchantTrend<T extends { key: string }>(
+  merchants: T[],
+  trendRows: MerchantTrendTxn[],
+  monthBuckets: MonthBucket[]
+): (T & { trend: { month: string; amount: number }[] })[] {
+  const totals = new Map<string, number>(); // "<merchantKey>|<bucketIndex>" -> amount
+  for (const row of trendRows) {
+    const key = reduceDescription(row.description_raw);
+    if (key.length < 4) continue;
+    const bucketIndex = monthBuckets.findIndex((b) => row.txn_date >= b.startKey && row.txn_date <= b.endKey);
+    if (bucketIndex === -1) continue;
+    const mapKey = `${key}|${bucketIndex}`;
+    totals.set(mapKey, (totals.get(mapKey) ?? 0) + row.amount);
+  }
+
+  return merchants.map((m) => ({
+    ...m,
+    trend: monthBuckets.map((b, i) => ({ month: b.label, amount: totals.get(`${m.key}|${i}`) ?? 0 })),
+  }));
 }

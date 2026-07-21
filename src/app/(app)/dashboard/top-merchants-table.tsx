@@ -1,22 +1,26 @@
 import type { MerchantDelta } from '@/lib/dashboard/merchants';
+import { Sparkline } from './sparkline';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
 
-export function TopMerchantsTable({ rows }: { rows: MerchantDelta[] }) {
+type MerchantRow = MerchantDelta & { trend: { month: string; amount: number }[] };
+
+export function TopMerchantsTable({ rows }: { rows: MerchantRow[] }) {
   if (rows.length === 0) {
     return <p className="text-sm text-muted-foreground">No expense data for this period yet.</p>;
   }
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[520px] text-sm">
+      <table className="w-full min-w-[640px] text-sm">
         <thead>
           <tr className="text-left text-muted-foreground">
             <th className="pb-2 font-medium">Merchant</th>
             <th className="pb-2 text-right font-medium">This period</th>
             <th className="pb-2 text-right font-medium">Same days last month</th>
             <th className="pb-2 text-right font-medium">Change</th>
+            <th className="pb-2 pl-3 text-left font-medium">Last months</th>
           </tr>
         </thead>
         <tbody>
@@ -34,6 +38,9 @@ export function TopMerchantsTable({ rows }: { rows: MerchantDelta[] }) {
               >
                 {row.delta > 0 ? '+' : ''}
                 {formatCurrency(row.delta)}
+              </td>
+              <td className="py-2 pl-3">
+                <Sparkline months={row.trend} />
               </td>
             </tr>
           ))}
