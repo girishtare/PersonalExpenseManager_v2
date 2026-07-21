@@ -5,7 +5,11 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { getConnectionSyncStatus, type SyncStatus } from './actions';
 
-const POLL_INTERVAL_MS = 2000;
+const ACTIVE_POLL_INTERVAL_MS = 2000;
+// Much slower than the active-sync poll - this one's only job is to notice a background state
+// change (a self-chained run starting/pausing, or a "Sync now" click from another tab) while
+// this page sits open and not actively syncing, so it doesn't need to be quick.
+const IDLE_WATCH_INTERVAL_MS = 30_000;
 
 export function SyncButton({ connectionId, initialStatus }: { connectionId: string; initialStatus: SyncStatus }) {
   const router = useRouter();
@@ -20,7 +24,7 @@ export function SyncButton({ connectionId, initialStatus }: { connectionId: stri
     }
   }
 
-  function startPolling(options?: { waitForStart?: boolean }) {
+  function startActivePolling(options?: { waitForStart?: boolean }) {
     stopPolling();
     // When polling begins the instant a sync is kicked off, the first poll can land before the
     // server has flipped sync_status to 'running' - without this grace logic that stale 'idle'
@@ -37,14 +41,44 @@ export function SyncButton({ connectionId, initialStatus }: { connectionId: stri
         stopPolling();
         router.refresh();
       }
-    }, POLL_INTERVAL_MS);
+    }, ACTIVE_POLL_INTERVAL_MS);
+  }
+
+  /** Watches a connection that ISN'T currently syncing, so a run that starts (or a pause/error
+   * that appears) after this page already loaded isn't invisible until a manual refresh. */
+  function startIdleWatch() {
+    stopPolling();
+    let lastStatus = status.status;
+    let lastError = status.error;
+    pollRef.current = setInterval(async () => {
+      const latest = await getConnectionSyncStatus(connectionId);
+      if (!latest) return;
+      if (latest.status === 'running') {
+        startActivePolling();
+        return;
+      }
+      if (latest.status !== lastStatus || latest.error !== lastError) {
+        lastStatus = latest.status;
+        lastError = latest.error;
+        setStatus(latest);
+        // Also refreshes the server-rendered error/last-synced text on the page itself, not
+        // just this component's own local state.
+        router.refresh();
+      }
+    }, IDLE_WATCH_INTERVAL_MS);
   }
 
   useEffect(() => {
     // The sync itself runs server-side regardless of this page being open (see
-    // /api/gmail/sync's self-chaining) - if it was already running when this page loaded
-    // (e.g. the user navigated away and came back), just resume watching it.
-    if (initialStatus.status === 'running') startPolling();
+    // /api/gmail/sync's self-chaining) - if it was already running when this page loaded (e.g.
+    // the user navigated away and came back), just resume watching it closely. Otherwise, still
+    // watch it, just slowly, so this component doesn't go silent for the rest of the page's
+    // lifetime the moment a background run pauses or errors.
+    if (initialStatus.status === 'running') {
+      startActivePolling();
+    } else {
+      startIdleWatch();
+    }
     return stopPolling;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -54,7 +88,7 @@ export function SyncButton({ connectionId, initialStatus }: { connectionId: stri
     setStatus((s) => ({ ...s, status: 'running', processed: 0, total: 0 }));
     // Poll from the very start - the kickoff request below stays busy processing batches for up
     // to ~a minute before responding, and the DB-backed progress is live the whole time.
-    startPolling({ waitForStart: true });
+    startActivePolling({ waitForStart: true });
     try {
       const res = await fetch('/api/gmail/sync', {
         method: 'POST',
