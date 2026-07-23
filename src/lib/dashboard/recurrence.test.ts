@@ -126,6 +126,36 @@ describe('detectRecurringDebits', () => {
     expect(result[0].isEstimate).toBe(false);
   });
 
+  it('tolerates a single skipped-cycle gap in an otherwise-monthly pattern', () => {
+    const result = detectRecurringDebits(
+      [
+        txn('2026-02-05', 20000, 'NET BANKING SI HOUSEHOLD EXPENSES'),
+        txn('2026-03-07', 20000, 'NET BANKING SI HOUSEHOLD EXPENSES'),
+        // 62-day gap here (one missed month) instead of the usual ~30.
+        txn('2026-05-08', 20000, 'NET BANKING SI HOUSEHOLD EXPENSES'),
+        txn('2026-06-08', 20000, 'NET BANKING SI HOUSEHOLD EXPENSES'),
+      ],
+      ASOF
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].occurrences).toBe(4);
+  });
+
+  it('rejects a pattern with more than one wide gap', () => {
+    const result = detectRecurringDebits(
+      [
+        txn('2026-01-01', 20000, 'IRREGULAR TRANSFER'),
+        // 62-day gap
+        txn('2026-03-04', 20000, 'IRREGULAR TRANSFER'),
+        // another 62-day gap
+        txn('2026-05-05', 20000, 'IRREGULAR TRANSFER'),
+        txn('2026-06-05', 20000, 'IRREGULAR TRANSFER'),
+      ],
+      ASOF
+    );
+    expect(result).toHaveLength(0);
+  });
+
   it('sorts multiple recurring groups by soonest expected date', () => {
     const result = detectRecurringDebits(
       [

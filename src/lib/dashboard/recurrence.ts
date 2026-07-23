@@ -30,6 +30,12 @@ const AMOUNT_TOLERANCE = 0.05;
 const MIN_OCCURRENCES = 3;
 const MIN_GAP_DAYS = 20;
 const MAX_GAP_DAYS = 40;
+/** A single markedly wider gap (one skipped/delayed cycle) is still consistent with an otherwise
+ * monthly pattern - e.g. a household-expenses transfer that's ~30 days every month except one
+ * 62-day stretch. More than one such gap looks like a genuinely different (or non-monthly)
+ * cadence rather than an occasional skip, so only one is tolerated. */
+const SKIPPED_CYCLE_MAX_GAP_DAYS = MAX_GAP_DAYS * 2;
+const MAX_WIDE_GAPS = 1;
 /** If the predicted next occurrence is already this many days in the past, treat the pattern as stopped rather than upcoming. */
 const STALE_AFTER_DAYS = 10;
 const VARIABLE_AMOUNT_CATEGORY = 'Bills & Utilities';
@@ -83,7 +89,9 @@ export function detectRecurringDebits(transactions: RecurrenceTxn[], asOf: Date 
       const curr = parseDateKey(sorted[i].txn_date);
       gapsInDays.push((curr.getTime() - prev.getTime()) / 86_400_000);
     }
-    const monthlyLike = gapsInDays.every((g) => g >= MIN_GAP_DAYS && g <= MAX_GAP_DAYS);
+    const allGapsPlausible = gapsInDays.every((g) => g >= MIN_GAP_DAYS && g <= SKIPPED_CYCLE_MAX_GAP_DAYS);
+    const wideGapCount = gapsInDays.filter((g) => g > MAX_GAP_DAYS).length;
+    const monthlyLike = allGapsPlausible && wideGapCount <= MAX_WIDE_GAPS;
     if (!monthlyLike) continue;
 
     const expectedDate = shiftByMonths(parseDateKey(lastTxn.txn_date), 1);

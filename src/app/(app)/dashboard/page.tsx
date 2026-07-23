@@ -283,7 +283,12 @@ export default async function DashboardPage({
     description_raw: r.description_raw,
     categoryName: categoryOf(r)?.name ?? null,
   }));
-  const upcomingDebits = detectRecurringDebits(recurrenceRowsTyped, today);
+  const upcomingDebits = detectRecurringDebits(recurrenceRowsTyped, today).map((d) => ({
+    ...d,
+    // Same alias lookup Top Merchants uses - descriptionKey is the same reduceDescription-based
+    // key as merchant_aliases.merchant_key.
+    sampleDescription: merchantAliasByKey.get(d.descriptionKey) ?? d.sampleDescription,
+  }));
 
   const categoryMonthlyTrend = computeCategoryMonthlyTrend(trendRowsTyped, monthBuckets);
 
