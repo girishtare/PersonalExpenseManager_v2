@@ -212,20 +212,34 @@ export default async function DashboardPage({
     return accountId ? q.eq('account_id', accountId) : q;
   };
 
-  const [{ data: accounts }, currentRows, previousRows, twoMonthsAgoRows, threeMonthsAgoRows, trendRows, recurrenceRows, { data: earliestTxn }] =
-    await Promise.all([
-      supabase.from('accounts').select('id, display_name').eq('user_id', user.id).order('created_at', { ascending: true }),
-      fetchAllRows(currentQuery),
-      fetchAllRows(previousQuery),
-      fetchAllRows(twoMonthsAgoQuery),
-      fetchAllRows(threeMonthsAgoQuery),
-      fetchAllRows(trendQuery),
-      fetchAllRows(recurrenceQuery),
-      // Powers the Year dropdown's lower bound - only years that actually have data, rather than
-      // an arbitrary fixed lookback.
-      supabase.from('transactions').select('txn_date').eq('user_id', user.id).order('txn_date', { ascending: true }).limit(1).maybeSingle(),
-    ]);
+  const [
+    { data: accounts },
+    currentRows,
+    previousRows,
+    twoMonthsAgoRows,
+    threeMonthsAgoRows,
+    trendRows,
+    recurrenceRows,
+    { data: merchantAliases },
+    { data: earliestTxn },
+  ] = await Promise.all([
+    supabase.from('accounts').select('id, display_name').eq('user_id', user.id).order('created_at', { ascending: true }),
+    fetchAllRows(currentQuery),
+    fetchAllRows(previousQuery),
+    fetchAllRows(twoMonthsAgoQuery),
+    fetchAllRows(threeMonthsAgoQuery),
+    fetchAllRows(trendQuery),
+    fetchAllRows(recurrenceQuery),
+    // The name the user typed in for a merchant on the Transactions tab (MerchantNameCell) -
+    // Top merchants prefers this over the raw parsed description, same as the Transactions list.
+    supabase.from('merchant_aliases').select('merchant_key, display_name').eq('user_id', user.id),
+    // Powers the Year dropdown's lower bound - only years that actually have data, rather than
+    // an arbitrary fixed lookback.
+    supabase.from('transactions').select('txn_date').eq('user_id', user.id).order('txn_date', { ascending: true }).limit(1).maybeSingle(),
+  ]);
   const earliestYear = earliestTxn ? Number(earliestTxn.txn_date.slice(0, 4)) : today.getFullYear();
+
+  const merchantAliasByKey = new Map((merchantAliases ?? []).map((a) => [a.merchant_key, a.display_name]));
 
   const current = currentRows as TxnRow[];
   const previous = previousRows as TxnRow[];
@@ -282,7 +296,12 @@ export default async function DashboardPage({
   const topMerchantsBase = computeTopMerchants(current.filter(isExpenseRow), previous.filter(isExpenseRow), [
     { label: monthLabel(twoMonthsAgoStart), rows: twoMonthsAgo.filter(isExpenseRow) },
     { label: monthLabel(threeMonthsAgoStart), rows: threeMonthsAgo.filter(isExpenseRow) },
-  ]);
+  ]).map((row) => ({
+    ...row,
+    // The name the user typed in on the Transactions tab, when they've set one - falls back to
+    // a real raw description (never the internal grouping key) otherwise.
+    name: merchantAliasByKey.get(row.key) ?? row.name,
+  }));
   // Last 6 months (not the full 12 the bar chart uses) - a compact, legible span for an inline
   // sparkline rather than 12 cramped points.
   const topMerchants = attachMerchantTrend(topMerchantsBase, trendRowsTyped.filter(isExpenseRow), monthBuckets.slice(-6));

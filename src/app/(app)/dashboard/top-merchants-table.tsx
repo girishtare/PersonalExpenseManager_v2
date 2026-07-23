@@ -20,7 +20,7 @@ export function TopMerchantsTable({ rows }: { rows: MerchantRow[] }) {
       <table className="w-full min-w-[820px] text-sm">
         <thead>
           <tr className="text-left text-muted-foreground">
-            <th className="pb-2 font-medium">Description</th>
+            <th className="pb-2 font-medium">Merchant</th>
             <th className="pb-2 text-right font-medium">This period</th>
             <th className="pb-2 text-right font-medium">Same days last month</th>
             {historyLabels.map((label) => (
