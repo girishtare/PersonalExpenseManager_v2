@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/card';
 import type { TxnType } from '@/lib/transactions/type';
 import { aggregateByCategory, categoryOf, computeSavingsRate, sumByType } from '@/lib/transactions/aggregate';
 import { effectiveTxnType } from '@/lib/transactions/type';
-import { computeMtdBadge, parseDateKey, sameDaysLastMonth, toDateKey, type MtdBadge } from '@/lib/dashboard/period';
+import { computeMtdBadge, parseDateKey, sameDaysLastMonth, sameDaysMonthsAgo, toDateKey, type MtdBadge } from '@/lib/dashboard/period';
 import { fetchAllRows } from '@/lib/supabase/fetch-all';
 import { detectRecurringDebits, type RecurrenceTxn } from '@/lib/dashboard/recurrence';
 import { computeTopMerchants, attachMerchantTrend } from '@/lib/dashboard/merchants';
@@ -154,6 +154,10 @@ export default async function DashboardPage({
   const accountId = params.accountId ?? '';
 
   const { start: prevStart, end: prevEnd } = sameDaysLastMonth(start, end);
+  // Top merchants shows 2 more "same days N months ago" comparison columns beyond the
+  // immediately-previous period.
+  const { start: twoMonthsAgoStart, end: twoMonthsAgoEnd } = sameDaysMonthsAgo(start, end, 2);
+  const { start: threeMonthsAgoStart, end: threeMonthsAgoEnd } = sameDaysMonthsAgo(start, end, 3);
   const mtdBadge: MtdBadge | null = computeMtdBadge(start, end);
 
   const twelveMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 11, 1);
@@ -170,6 +174,22 @@ export default async function DashboardPage({
   };
   const previousQuery = () => {
     const q = supabase.from('transactions').select(TXN_SELECT).gte('txn_date', toDateKey(prevStart)).lte('txn_date', toDateKey(prevEnd));
+    return accountId ? q.eq('account_id', accountId) : q;
+  };
+  const twoMonthsAgoQuery = () => {
+    const q = supabase
+      .from('transactions')
+      .select(TXN_SELECT)
+      .gte('txn_date', toDateKey(twoMonthsAgoStart))
+      .lte('txn_date', toDateKey(twoMonthsAgoEnd));
+    return accountId ? q.eq('account_id', accountId) : q;
+  };
+  const threeMonthsAgoQuery = () => {
+    const q = supabase
+      .from('transactions')
+      .select(TXN_SELECT)
+      .gte('txn_date', toDateKey(threeMonthsAgoStart))
+      .lte('txn_date', toDateKey(threeMonthsAgoEnd));
     return accountId ? q.eq('account_id', accountId) : q;
   };
   const trendQuery = () => {
@@ -192,24 +212,25 @@ export default async function DashboardPage({
     return accountId ? q.eq('account_id', accountId) : q;
   };
 
-  const [{ data: accounts }, currentRows, previousRows, trendRows, recurrenceRows, { data: merchantAliases }, { data: earliestTxn }] =
+  const [{ data: accounts }, currentRows, previousRows, twoMonthsAgoRows, threeMonthsAgoRows, trendRows, recurrenceRows, { data: earliestTxn }] =
     await Promise.all([
       supabase.from('accounts').select('id, display_name').eq('user_id', user.id).order('created_at', { ascending: true }),
       fetchAllRows(currentQuery),
       fetchAllRows(previousQuery),
+      fetchAllRows(twoMonthsAgoQuery),
+      fetchAllRows(threeMonthsAgoQuery),
       fetchAllRows(trendQuery),
       fetchAllRows(recurrenceQuery),
-      supabase.from('merchant_aliases').select('merchant_key, display_name').eq('user_id', user.id),
       // Powers the Year dropdown's lower bound - only years that actually have data, rather than
       // an arbitrary fixed lookback.
       supabase.from('transactions').select('txn_date').eq('user_id', user.id).order('txn_date', { ascending: true }).limit(1).maybeSingle(),
     ]);
   const earliestYear = earliestTxn ? Number(earliestTxn.txn_date.slice(0, 4)) : today.getFullYear();
 
-  const merchantAliasByKey = new Map((merchantAliases ?? []).map((a) => [a.merchant_key, a.display_name]));
-
   const current = currentRows as TxnRow[];
   const previous = previousRows as TxnRow[];
+  const twoMonthsAgo = twoMonthsAgoRows as TxnRow[];
+  const threeMonthsAgo = threeMonthsAgoRows as TxnRow[];
 
   const expenseCategories = aggregateByCategory(current, 'expense');
   const totalIncome = sumByType(current, 'income');
@@ -258,13 +279,13 @@ export default async function DashboardPage({
     const category = categoryOf(row);
     return !!category && effectiveTxnType(row, category) === 'expense';
   };
-  const topMerchantsWithAlias = computeTopMerchants(current.filter(isExpenseRow), previous.filter(isExpenseRow)).map((row) => ({
-    ...row,
-    name: merchantAliasByKey.get(row.key) ?? row.name,
-  }));
+  const topMerchantsBase = computeTopMerchants(current.filter(isExpenseRow), previous.filter(isExpenseRow), [
+    { label: monthLabel(twoMonthsAgoStart), rows: twoMonthsAgo.filter(isExpenseRow) },
+    { label: monthLabel(threeMonthsAgoStart), rows: threeMonthsAgo.filter(isExpenseRow) },
+  ]);
   // Last 6 months (not the full 12 the bar chart uses) - a compact, legible span for an inline
   // sparkline rather than 12 cramped points.
-  const topMerchants = attachMerchantTrend(topMerchantsWithAlias, trendRowsTyped.filter(isExpenseRow), monthBuckets.slice(-6));
+  const topMerchants = attachMerchantTrend(topMerchantsBase, trendRowsTyped.filter(isExpenseRow), monthBuckets.slice(-6));
 
   return (
     <main className="flex flex-1 flex-col gap-8 p-8">

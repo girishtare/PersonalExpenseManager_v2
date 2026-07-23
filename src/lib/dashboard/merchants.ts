@@ -12,6 +12,9 @@ export interface MerchantDelta {
   current: number;
   previous: number;
   delta: number;
+  /** Additional labeled comparison periods (e.g. 2/3 months ago) beyond `previous`, in the same
+   * order they were passed in. */
+  history: { label: string; amount: number }[];
 }
 
 export interface MerchantTrendTxn {
@@ -20,41 +23,61 @@ export interface MerchantTrendTxn {
   txn_date: string;
 }
 
+export interface MerchantPeriod {
+  label: string;
+  rows: MerchantTxn[];
+}
+
+/** Groups one period's transactions by "core" merchant text (see reduceDescription), keeping
+ * the first real description_raw seen as the display name - never the bare reduced key, which
+ * is only meant as an internal grouping id. */
+function groupByMerchant(rows: MerchantTxn[]): Map<string, { name: string; total: number }> {
+  const totals = new Map<string, { name: string; total: number }>();
+  for (const t of rows) {
+    const key = reduceDescription(t.description_raw);
+    if (key.length < 4) continue;
+    const entry = totals.get(key) ?? { name: t.description_raw, total: 0 };
+    entry.total += t.amount;
+    totals.set(key, entry);
+  }
+  return totals;
+}
+
 /**
  * Groups transactions by their "core" merchant text (see reduceDescription) and computes each
- * merchant's current-vs-previous-period totals, sorted by the size of the change (not the
- * absolute spend) so the biggest movers surface first regardless of direction.
+ * merchant's current-vs-previous-period totals, sorted by the size of that change (not the
+ * absolute spend) so the biggest movers surface first regardless of direction. `extraPeriods`
+ * (e.g. 2/3 months ago) are purely informational - they don't affect sorting or `delta`, which
+ * stay anchored to the immediately-previous period.
  */
-export function computeTopMerchants(current: MerchantTxn[], previous: MerchantTxn[], limit = 10): MerchantDelta[] {
-  const currentTotals = new Map<string, { name: string; total: number }>();
-  for (const t of current) {
-    const key = reduceDescription(t.description_raw);
-    if (key.length < 4) continue;
-    const entry = currentTotals.get(key) ?? { name: t.description_raw, total: 0 };
-    entry.total += t.amount;
-    currentTotals.set(key, entry);
-  }
+export function computeTopMerchants(
+  current: MerchantTxn[],
+  previous: MerchantTxn[],
+  extraPeriods: MerchantPeriod[] = [],
+  limit = 10
+): MerchantDelta[] {
+  const currentTotals = groupByMerchant(current);
+  const previousTotals = groupByMerchant(previous);
+  const extraTotals = extraPeriods.map((p) => groupByMerchant(p.rows));
 
-  const previousTotals = new Map<string, number>();
-  for (const t of previous) {
-    const key = reduceDescription(t.description_raw);
-    if (key.length < 4) continue;
-    previousTotals.set(key, (previousTotals.get(key) ?? 0) + t.amount);
-  }
-
-  const allKeys = new Set([...currentTotals.keys(), ...previousTotals.keys()]);
+  const allKeys = new Set([...currentTotals.keys(), ...previousTotals.keys(), ...extraTotals.flatMap((t) => [...t.keys()])]);
   const rows: MerchantDelta[] = [];
   for (const key of allKeys) {
     const currentEntry = currentTotals.get(key);
+    const previousEntry = previousTotals.get(key);
     const currentTotal = currentEntry?.total ?? 0;
-    const previousTotal = previousTotals.get(key) ?? 0;
-    if (currentTotal === 0 && previousTotal === 0) continue;
+    const previousTotal = previousEntry?.total ?? 0;
+    const hasExtraActivity = extraTotals.some((t) => t.has(key));
+    if (currentTotal === 0 && previousTotal === 0 && !hasExtraActivity) continue;
     rows.push({
       key,
-      name: currentEntry?.name ?? key,
+      // A real raw description from whichever period has one - the bare key is only a
+      // last-resort fallback that should never actually trigger in practice.
+      name: currentEntry?.name ?? previousEntry?.name ?? extraTotals.find((t) => t.has(key))?.get(key)?.name ?? key,
       current: currentTotal,
       previous: previousTotal,
       delta: currentTotal - previousTotal,
+      history: extraPeriods.map((p, i) => ({ label: p.label, amount: extraTotals[i].get(key)?.total ?? 0 })),
     });
   }
 

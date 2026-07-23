@@ -17,15 +17,52 @@ describe('computeTopMerchants', () => {
     expect(result[0].name).toBe('SMALL BUT DOUBLED');
   });
 
-  it('includes a merchant present only in the previous period, as a drop to zero', () => {
+  it('uses a real raw description from the previous period as the name, never the bare key', () => {
     const result = computeTopMerchants([], [{ description_raw: 'CANCELLED SUB', amount: 500 }]);
-    // No current-period row to source a display name from, so it falls back to the reduced key.
-    expect(result).toEqual([{ key: 'cancelled sub', name: 'cancelled sub', current: 0, previous: 500, delta: -500 }]);
+    expect(result).toEqual([
+      { key: 'cancelled sub', name: 'CANCELLED SUB', current: 0, previous: 500, delta: -500, history: [] },
+    ]);
   });
 
   it('excludes a description that reduces to nothing usable', () => {
     const result = computeTopMerchants([{ description_raw: '123', amount: 100 }], []);
     expect(result).toHaveLength(0);
+  });
+
+  it('attaches labeled extra-period history without affecting delta or sort order', () => {
+    const result = computeTopMerchants(
+      [{ description_raw: 'SWIGGY', amount: 500 }],
+      [{ description_raw: 'SWIGGY', amount: 400 }],
+      [
+        { label: 'May 2026', rows: [{ description_raw: 'SWIGGY', amount: 300 }] },
+        { label: 'Apr 2026', rows: [{ description_raw: 'SWIGGY', amount: 700 }] },
+      ]
+    );
+    expect(result[0].delta).toBe(100); // still current - previous, unaffected by history
+    expect(result[0].history).toEqual([
+      { label: 'May 2026', amount: 300 },
+      { label: 'Apr 2026', amount: 700 },
+    ]);
+  });
+
+  it('zero-fills an extra period with no matching activity', () => {
+    const result = computeTopMerchants(
+      [{ description_raw: 'SWIGGY', amount: 500 }],
+      [],
+      [{ label: 'May 2026', rows: [{ description_raw: 'ZOMATO', amount: 300 }] }]
+    );
+    expect(result[0].history).toEqual([{ label: 'May 2026', amount: 0 }]);
+  });
+
+  it('includes a merchant with activity only in an extra period, not current/previous', () => {
+    const result = computeTopMerchants(
+      [],
+      [],
+      [{ label: 'May 2026', rows: [{ description_raw: 'ONLY IN MAY', amount: 300 }] }]
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('ONLY IN MAY');
+    expect(result[0].history).toEqual([{ label: 'May 2026', amount: 300 }]);
   });
 });
 

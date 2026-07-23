@@ -30,13 +30,18 @@ export function shiftByMonths(date: Date, months: number): Date {
 }
 
 /**
- * The "same days last month" comparison window: for a selected [start, end] range, the
- * previous-month window covering the same day-of-month span (e.g. 1-8 Jul -> 1-8 Jun). Each
- * endpoint is shifted independently and clamped to its own target month's length, so a range
- * ending on the 31st correctly lands on the 28th/29th/30th in a shorter month.
+ * The "same days N months ago" comparison window: for a selected [start, end] range, the window
+ * N months back covering the same day-of-month span (e.g. 1-8 Jul, 2 months back -> 1-8 May).
+ * Each endpoint is shifted independently and clamped to its own target month's length, so a
+ * range ending on the 31st correctly lands on the 28th/29th/30th in a shorter month.
  */
+export function sameDaysMonthsAgo(start: Date, end: Date, monthsAgo: number): { start: Date; end: Date } {
+  return { start: shiftByMonths(start, -monthsAgo), end: shiftByMonths(end, -monthsAgo) };
+}
+
+/** The "same days last month" comparison window - see sameDaysMonthsAgo. */
 export function sameDaysLastMonth(start: Date, end: Date): { start: Date; end: Date } {
-  return { start: shiftByMonths(start, -1), end: shiftByMonths(end, -1) };
+  return sameDaysMonthsAgo(start, end, 1);
 }
 
 export interface MtdBadge {
