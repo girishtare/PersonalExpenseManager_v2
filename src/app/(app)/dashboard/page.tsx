@@ -389,7 +389,10 @@ export default async function DashboardPage({
       </Card>
 
       <Card className="flex flex-col gap-4 p-5">
-        <h2 className="font-medium">Top merchants</h2>
+        <div>
+          <h2 className="font-medium">Top merchants</h2>
+          <p className="text-xs text-muted-foreground">Ranked by average spend over the last 3 months (same days each month)</p>
+        </div>
         <TopMerchantsTable rows={topMerchants} />
       </Card>
 

@@ -3,7 +3,7 @@ import { attachMerchantTrend, computeTopMerchants, type MerchantTrendTxn } from 
 import type { MonthBucket } from './category-trend';
 
 describe('computeTopMerchants', () => {
-  it('sorts by size of change, not absolute spend', () => {
+  it('sorts by average spend across history periods, not size of change or current-period spend', () => {
     const result = computeTopMerchants(
       [
         { description_raw: 'BIG STABLE MERCHANT', amount: 10000 },
@@ -14,13 +14,15 @@ describe('computeTopMerchants', () => {
         { description_raw: 'SMALL BUT DOUBLED', amount: 100 },
       ]
     );
-    expect(result[0].name).toBe('SMALL BUT DOUBLED');
+    // SMALL BUT DOUBLED changed the most (and the least in absolute terms), but BIG STABLE
+    // MERCHANT has the higher average spend, so it should rank first now.
+    expect(result[0].name).toBe('BIG STABLE MERCHANT');
   });
 
   it('uses a real raw description from the previous period as the name, never the bare key', () => {
     const result = computeTopMerchants([], [{ description_raw: 'CANCELLED SUB', amount: 500 }]);
     expect(result).toEqual([
-      { key: 'cancelled sub', name: 'CANCELLED SUB', current: 0, previous: 500, delta: -500, history: [] },
+      { key: 'cancelled sub', name: 'CANCELLED SUB', current: 0, previous: 500, delta: -500, avgSpend: 500, history: [] },
     ]);
   });
 
@@ -29,7 +31,7 @@ describe('computeTopMerchants', () => {
     expect(result).toHaveLength(0);
   });
 
-  it('attaches labeled extra-period history without affecting delta or sort order', () => {
+  it('attaches labeled extra-period history and averages it into the sort key alongside previous', () => {
     const result = computeTopMerchants(
       [{ description_raw: 'SWIGGY', amount: 500 }],
       [{ description_raw: 'SWIGGY', amount: 400 }],
@@ -38,7 +40,8 @@ describe('computeTopMerchants', () => {
         { label: 'Apr 2026', rows: [{ description_raw: 'SWIGGY', amount: 700 }] },
       ]
     );
-    expect(result[0].delta).toBe(100); // still current - previous, unaffected by history
+    expect(result[0].delta).toBe(100); // still current - previous
+    expect(result[0].avgSpend).toBe((400 + 300 + 700) / 3); // previous + extraPeriods, not current
     expect(result[0].history).toEqual([
       { label: 'May 2026', amount: 300 },
       { label: 'Apr 2026', amount: 700 },
@@ -51,7 +54,7 @@ describe('computeTopMerchants', () => {
       [],
       [{ label: 'May 2026', rows: [{ description_raw: 'ZOMATO', amount: 300 }] }]
     );
-    expect(result[0].history).toEqual([{ label: 'May 2026', amount: 0 }]);
+    expect(result.find((r) => r.name === 'SWIGGY')?.history).toEqual([{ label: 'May 2026', amount: 0 }]);
   });
 
   it('includes a merchant with activity only in an extra period, not current/previous', () => {
@@ -63,6 +66,18 @@ describe('computeTopMerchants', () => {
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe('ONLY IN MAY');
     expect(result[0].history).toEqual([{ label: 'May 2026', amount: 300 }]);
+  });
+
+  it('ranks a merchant with only current-period activity below one with real history', () => {
+    const result = computeTopMerchants(
+      [
+        { description_raw: 'BRAND NEW MERCHANT', amount: 50000 },
+        { description_raw: 'STEADY MERCHANT', amount: 1000 },
+      ],
+      [{ description_raw: 'STEADY MERCHANT', amount: 1000 }]
+    );
+    // BRAND NEW MERCHANT has no prior-period history (avgSpend 0) despite a huge current spend.
+    expect(result.map((r) => r.name)).toEqual(['STEADY MERCHANT', 'BRAND NEW MERCHANT']);
   });
 });
 

@@ -12,6 +12,10 @@ export interface MerchantDelta {
   current: number;
   previous: number;
   delta: number;
+  /** Average spend across `previous` and all `extraPeriods` - the ranking/sort key, so merchants
+   * with consistently high recent spend surface first rather than whichever one happened to
+   * swing the most since last period. */
+  avgSpend: number;
   /** Additional labeled comparison periods (e.g. 2/3 months ago) beyond `previous`, in the same
    * order they were passed in. */
   history: { label: string; amount: number }[];
@@ -44,11 +48,12 @@ function groupByMerchant(rows: MerchantTxn[]): Map<string, { name: string; total
 }
 
 /**
- * Groups transactions by their "core" merchant text (see reduceDescription) and computes each
- * merchant's current-vs-previous-period totals, sorted by the size of that change (not the
- * absolute spend) so the biggest movers surface first regardless of direction. `extraPeriods`
- * (e.g. 2/3 months ago) are purely informational - they don't affect sorting or `delta`, which
- * stay anchored to the immediately-previous period.
+ * Groups transactions by their "core" merchant text (see reduceDescription) and ranks merchants
+ * by their average spend across `previous` and `extraPeriods` - i.e. the last N "same days"
+ * periods, not counting the still-in-progress `current` one - so consistently high spenders
+ * surface first rather than whichever merchant happened to swing the most since last period.
+ * `current` and `delta` are still returned for display (and `current` alone can pull a merchant
+ * with no history into the results), they just no longer drive the ranking.
  */
 export function computeTopMerchants(
   current: MerchantTxn[],
@@ -69,6 +74,8 @@ export function computeTopMerchants(
     const previousTotal = previousEntry?.total ?? 0;
     const hasExtraActivity = extraTotals.some((t) => t.has(key));
     if (currentTotal === 0 && previousTotal === 0 && !hasExtraActivity) continue;
+    const historyTotals = [previousTotal, ...extraTotals.map((t) => t.get(key)?.total ?? 0)];
+    const avgSpend = historyTotals.reduce((sum, a) => sum + a, 0) / historyTotals.length;
     rows.push({
       key,
       // A real raw description from whichever period has one - the bare key is only a
@@ -77,11 +84,12 @@ export function computeTopMerchants(
       current: currentTotal,
       previous: previousTotal,
       delta: currentTotal - previousTotal,
+      avgSpend,
       history: extraPeriods.map((p, i) => ({ label: p.label, amount: extraTotals[i].get(key)?.total ?? 0 })),
     });
   }
 
-  return rows.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, limit);
+  return rows.sort((a, b) => b.avgSpend - a.avgSpend).slice(0, limit);
 }
 
 /**
