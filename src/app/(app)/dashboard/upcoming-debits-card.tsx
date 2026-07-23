@@ -1,5 +1,6 @@
 import type { UpcomingDebit } from '@/lib/dashboard/recurrence';
 import { parseDateKey } from '@/lib/dashboard/period';
+import { MerchantNameCell } from '@/components/merchant-name-cell';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
@@ -8,7 +9,9 @@ function formatDate(dateKey: string): string {
   return parseDateKey(dateKey).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 }
 
-export function UpcomingDebitsCard({ debits }: { debits: UpcomingDebit[] }) {
+type UpcomingDebitRow = UpcomingDebit & { aliasName: string | null };
+
+export function UpcomingDebitsCard({ debits }: { debits: UpcomingDebitRow[] }) {
   if (debits.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -22,9 +25,7 @@ export function UpcomingDebitsCard({ debits }: { debits: UpcomingDebit[] }) {
       {debits.map((d) => (
         <li key={d.descriptionKey} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium" title={d.sampleDescription}>
-              {d.sampleDescription}
-            </p>
+            <MerchantNameCell merchantKey={d.descriptionKey} descriptionRaw={d.sampleDescription} aliasName={d.aliasName} />
             <p className="text-xs text-muted-foreground">
               Expected {formatDate(d.expectedDate)} &middot; seen {d.occurrences} times
             </p>

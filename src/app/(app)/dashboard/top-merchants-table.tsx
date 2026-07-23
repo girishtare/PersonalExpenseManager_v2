@@ -1,10 +1,11 @@
 import type { MerchantDelta } from '@/lib/dashboard/merchants';
+import { MerchantNameCell } from '@/components/merchant-name-cell';
 import { Sparkline } from './sparkline';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
 
-type MerchantRow = MerchantDelta & { trend: { month: string; amount: number }[] };
+type MerchantRow = MerchantDelta & { aliasName: string | null; trend: { month: string; amount: number }[] };
 
 export function TopMerchantsTable({ rows }: { rows: MerchantRow[] }) {
   if (rows.length === 0) {
@@ -35,8 +36,8 @@ export function TopMerchantsTable({ rows }: { rows: MerchantRow[] }) {
         <tbody>
           {rows.map((row) => (
             <tr key={row.key} className="border-t border-border">
-              <td className="max-w-xs truncate py-2" title={row.name}>
-                {row.name}
+              <td className="py-2">
+                <MerchantNameCell merchantKey={row.key} descriptionRaw={row.name} aliasName={row.aliasName} />
               </td>
               <td className="py-2 text-right tabular-nums">{formatCurrency(row.current)}</td>
               <td className="py-2 text-right tabular-nums text-muted-foreground">{formatCurrency(row.previous)}</td>

@@ -5,7 +5,7 @@ import { Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { setMerchantAlias } from './actions';
+import { setMerchantAlias } from '@/app/(app)/transactions/actions';
 
 export function MerchantNameCell({
   merchantKey,

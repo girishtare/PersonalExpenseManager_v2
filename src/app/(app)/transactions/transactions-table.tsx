@@ -18,7 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import type { TxnType } from '@/lib/transactions/type';
 import { bulkUpdateTransactionCategory } from './actions';
 import { CategoryPicker } from './category-picker';
-import { MerchantNameCell } from './merchant-name-cell';
+import { MerchantNameCell } from '@/components/merchant-name-cell';
 import { TxnTypePicker } from './txn-type-picker';
 
 interface Category {

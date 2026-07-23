@@ -286,8 +286,9 @@ export default async function DashboardPage({
   const upcomingDebits = detectRecurringDebits(recurrenceRowsTyped, today).map((d) => ({
     ...d,
     // Same alias lookup Top Merchants uses - descriptionKey is the same reduceDescription-based
-    // key as merchant_aliases.merchant_key.
-    sampleDescription: merchantAliasByKey.get(d.descriptionKey) ?? d.sampleDescription,
+    // key as merchant_aliases.merchant_key. Kept separate from sampleDescription (rather than
+    // substituted in) so the card can offer inline editing via MerchantNameCell.
+    aliasName: merchantAliasByKey.get(d.descriptionKey) ?? null,
   }));
 
   const categoryMonthlyTrend = computeCategoryMonthlyTrend(trendRowsTyped, monthBuckets);
@@ -303,9 +304,9 @@ export default async function DashboardPage({
     { label: monthLabel(threeMonthsAgoStart), rows: threeMonthsAgo.filter(isExpenseRow) },
   ]).map((row) => ({
     ...row,
-    // The name the user typed in on the Transactions tab, when they've set one - falls back to
-    // a real raw description (never the internal grouping key) otherwise.
-    name: merchantAliasByKey.get(row.key) ?? row.name,
+    // Kept separate from `name` (rather than substituted in) so the table can offer inline
+    // editing via MerchantNameCell, same as the Transactions tab.
+    aliasName: merchantAliasByKey.get(row.key) ?? null,
   }));
   // Last 6 months (not the full 12 the bar chart uses) - a compact, legible span for an inline
   // sparkline rather than 12 cramped points.
