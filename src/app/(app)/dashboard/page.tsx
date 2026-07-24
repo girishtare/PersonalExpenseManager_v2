@@ -397,9 +397,10 @@ export default async function DashboardPage({
         />
       </section>
 
-      <InsightsCard insights={insights} />
-
-      <AdvisoryCard advisory={advisory} />
+      <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <InsightsCard insights={insights} />
+        <AdvisoryCard advisory={advisory} />
+      </section>
 
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card className="flex flex-col gap-4 p-5">
