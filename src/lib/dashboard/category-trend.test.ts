@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeCategoryMonthlyTrend, type CategoryTrendTxn, type MonthBucket } from './category-trend';
+import { ALL_CATEGORIES_ID, computeCategoryMonthlyTrend, type CategoryTrendTxn, type MonthBucket } from './category-trend';
 
 const BUCKETS: MonthBucket[] = [
   { startKey: '2026-05-01', endKey: '2026-05-31', label: 'May 2026' },
@@ -28,23 +28,18 @@ describe('computeCategoryMonthlyTrend', () => {
       ],
       BUCKETS
     );
-    expect(result).toEqual([
+    const groceries = result.find((r) => r.categoryId === 'cat-groceries');
+    expect(groceries?.months).toEqual([
       {
-        categoryId: 'cat-groceries',
-        categoryName: 'Groceries',
-        months: [
-          {
-            month: 'May 2026',
-            amount: 500,
-            transactions: [{ description: 'STAR BAZAAR', merchantKey: 'star bazaar', amount: 500, date: '2026-05-10' }],
-          },
-          { month: 'Jun 2026', amount: 0, transactions: [] },
-          {
-            month: 'Jul 2026',
-            amount: 700,
-            transactions: [{ description: 'BIG BASKET', merchantKey: 'big basket', amount: 700, date: '2026-07-15' }],
-          },
-        ],
+        month: 'May 2026',
+        amount: 500,
+        transactions: [{ description: 'STAR BAZAAR', merchantKey: 'star bazaar', amount: 500, date: '2026-05-10', categoryName: 'Groceries' }],
+      },
+      { month: 'Jun 2026', amount: 0, transactions: [] },
+      {
+        month: 'Jul 2026',
+        amount: 700,
+        transactions: [{ description: 'BIG BASKET', merchantKey: 'big basket', amount: 700, date: '2026-07-15', categoryName: 'Groceries' }],
       },
     ]);
   });
@@ -57,7 +52,8 @@ describe('computeCategoryMonthlyTrend', () => {
       ],
       BUCKETS
     );
-    expect(result[0].months[1].transactions.map((t) => t.description)).toEqual(['BIG DINNER', 'SMALL SNACK']);
+    const dining = result.find((r) => r.categoryId === 'cat-dining');
+    expect(dining?.months[1].transactions.map((t) => t.description)).toEqual(['BIG DINNER', 'SMALL SNACK']);
   });
 
   it('sums multiple transactions within the same month', () => {
@@ -65,7 +61,7 @@ describe('computeCategoryMonthlyTrend', () => {
       [txn('2026-06-01', 200, 'cat-dining', 'Dining'), txn('2026-06-20', 300, 'cat-dining', 'Dining')],
       BUCKETS
     );
-    expect(result[0].months[1].amount).toBe(500);
+    expect(result.find((r) => r.categoryId === 'cat-dining')?.months[1].amount).toBe(500);
   });
 
   it('keeps separate categories separate', () => {
@@ -73,8 +69,7 @@ describe('computeCategoryMonthlyTrend', () => {
       [txn('2026-06-01', 200, 'cat-dining', 'Dining'), txn('2026-06-01', 900, 'cat-rent', 'Rent')],
       BUCKETS
     );
-    expect(result).toHaveLength(2);
-    expect(result.map((r) => r.categoryName).sort()).toEqual(['Dining', 'Rent']);
+    expect(result.map((r) => r.categoryName).sort()).toEqual(['All categories', 'Dining', 'Rent']);
   });
 
   it('excludes income, transfer, and investment rows', () => {
@@ -95,8 +90,7 @@ describe('computeCategoryMonthlyTrend', () => {
       [txn('2026-06-01', 1500, 'cat-transfer', 'Transfers Out (Own Accounts)', 'transfer', 'expense')],
       BUCKETS
     );
-    expect(result).toHaveLength(1);
-    expect(result[0].months[1].amount).toBe(1500);
+    expect(result.find((r) => r.categoryId === 'cat-transfer')?.months[1].amount).toBe(1500);
   });
 
   it('ignores rows outside every bucket', () => {
@@ -104,11 +98,32 @@ describe('computeCategoryMonthlyTrend', () => {
     expect(result).toHaveLength(0);
   });
 
-  it('returns categories sorted by name', () => {
+  it('returns "All categories" first, then individual categories sorted by name', () => {
     const result = computeCategoryMonthlyTrend(
       [txn('2026-06-01', 100, 'cat-z', 'Zoo Fees'), txn('2026-06-01', 100, 'cat-a', 'Auto Repair')],
       BUCKETS
     );
-    expect(result.map((r) => r.categoryName)).toEqual(['Auto Repair', 'Zoo Fees']);
+    expect(result.map((r) => r.categoryName)).toEqual(['All categories', 'Auto Repair', 'Zoo Fees']);
+  });
+
+  it('"All categories" combines every category\'s totals and transactions per month', () => {
+    const result = computeCategoryMonthlyTrend(
+      [
+        txn('2026-06-01', 200, 'cat-dining', 'Dining', 'expense', null, 'SNACK'),
+        txn('2026-06-05', 900, 'cat-rent', 'Rent', 'expense', null, 'LANDLORD'),
+      ],
+      BUCKETS
+    );
+    const all = result.find((r) => r.categoryId === ALL_CATEGORIES_ID);
+    expect(all?.months[1].amount).toBe(1100);
+    expect(all?.months[1].transactions.map((t) => ({ description: t.description, categoryName: t.categoryName }))).toEqual([
+      { description: 'LANDLORD', categoryName: 'Rent' },
+      { description: 'SNACK', categoryName: 'Dining' },
+    ]);
+  });
+
+  it('omits "All categories" entirely when there is no expense data', () => {
+    const result = computeCategoryMonthlyTrend([txn('2026-06-01', 50000, 'cat-salary', 'Salary', 'income')], BUCKETS);
+    expect(result).toEqual([]);
   });
 });

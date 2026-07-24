@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { MerchantNameCell } from '@/components/merchant-name-cell';
 import { parseDateKey } from '@/lib/dashboard/period';
-import type { CategoryMonthlyTrend } from '@/lib/dashboard/category-trend';
+import { ALL_CATEGORIES_ID, type CategoryMonthlyTrend } from '@/lib/dashboard/category-trend';
 import { CHART_COLORS } from './chart-colors';
 
 const formatAmount = (value: unknown) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(Number(value) || 0);
@@ -19,17 +19,12 @@ type MonthBar = Omit<CategoryMonthlyTrend['months'][number], 'transactions'> & {
 
 type CategoryMonthlyTrendWithAliases = Omit<CategoryMonthlyTrend, 'months'> & { months: MonthBar[] };
 
-function totalOf(category: CategoryMonthlyTrend): number {
-  return category.months.reduce((sum, m) => sum + m.amount, 0);
-}
-
 export function CategoryTrendChart({ data }: { data: CategoryMonthlyTrendWithAliases[] }) {
   const colors = CHART_COLORS[useTheme()];
-  // Default to the category with the highest 12-month spend, so the chart isn't empty on load.
-  const [categoryId, setCategoryId] = useState<string>(() => {
-    if (data.length === 0) return '';
-    return [...data].sort((a, b) => totalOf(b) - totalOf(a))[0].categoryId;
-  });
+  // computeCategoryMonthlyTrend always puts "All categories" first when there's any expense
+  // data at all, so defaulting to data[0] lands there - a more useful first view than an
+  // arbitrary single category.
+  const [categoryId, setCategoryId] = useState<string>(() => data[0]?.categoryId ?? '');
   const [drilldownMonth, setDrilldownMonth] = useState<MonthBar | null>(null);
 
   if (data.length === 0) {
@@ -100,7 +95,10 @@ export function CategoryTrendChart({ data }: { data: CategoryMonthlyTrendWithAli
               <li key={i} className="flex items-center justify-between gap-3 border-b border-border py-2 last:border-0">
                 <div className="min-w-0">
                   <MerchantNameCell merchantKey={t.merchantKey} descriptionRaw={t.description} aliasName={t.aliasName} />
-                  <p className="text-xs text-muted-foreground">{formatDate(t.date)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatDate(t.date)}
+                    {selected.categoryId === ALL_CATEGORIES_ID && <> &middot; {t.categoryName}</>}
+                  </p>
                 </div>
                 <span className="shrink-0 text-sm font-medium tabular-nums">{formatAmount(t.amount)}</span>
               </li>
