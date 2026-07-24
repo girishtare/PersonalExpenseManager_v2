@@ -14,12 +14,14 @@ import { fetchAllRows } from '@/lib/supabase/fetch-all';
 import { detectRecurringDebits, type RecurrenceTxn } from '@/lib/dashboard/recurrence';
 import { computeTopMerchants, attachMerchantTrend } from '@/lib/dashboard/merchants';
 import { computeCategoryMonthlyTrend } from '@/lib/dashboard/category-trend';
+import { computeInsights } from '@/lib/dashboard/insights';
 import { DashboardFilters } from './filters';
 import { MonthlyTrendChart, type MonthlyTrendPoint } from './monthly-trend-chart';
 import { CategoryDonutChart } from './category-donut-chart';
 import { UpcomingDebitsCard } from './upcoming-debits-card';
 import { TopMerchantsTable } from './top-merchants-table';
 import { CategoryTrendChart } from './category-trend-chart';
+import { InsightsCard } from './insights-card';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
@@ -113,6 +115,7 @@ function pointsDelta(current: number, previous: number, hasBaseline: boolean): D
 
 interface TxnRow {
   amount: number;
+  txn_date: string;
   txn_type_override: TxnType | null;
   category_id: string;
   description_raw: string;
@@ -162,7 +165,7 @@ export default async function DashboardPage({
 
   const twelveMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 11, 1);
 
-  const TXN_SELECT = 'amount, txn_type_override, category_id, description_raw, categories(name, txn_type)';
+  const TXN_SELECT = 'amount, txn_date, txn_type_override, category_id, description_raw, categories(name, txn_type)';
 
   // All four transaction queries go through fetchAllRows - the 12-month ones already exceed
   // PostgREST's silent 1000-row cap (which blanked the trend chart's recent months and the
@@ -320,6 +323,11 @@ export default async function DashboardPage({
   // sparkline rather than 12 cramped points.
   const topMerchants = attachMerchantTrend(topMerchantsBase, trendRowsTyped.filter(isExpenseRow), monthBuckets.slice(-6));
 
+  // Same "same days" comparison periods as Top merchants, so "your 3-month average" here means
+  // the same thing it does there. mtdBadge is only non-null for a partial current month, which
+  // is exactly when a pace projection is meaningful.
+  const insights = computeInsights(current, [previous, twoMonthsAgo, threeMonthsAgo], merchantAliasByKey, mtdBadge ? { end } : null);
+
   return (
     <main className="flex flex-1 flex-col gap-8 p-8">
       <div>
@@ -380,6 +388,8 @@ export default async function DashboardPage({
           mtdBadge={mtdBadge}
         />
       </section>
+
+      <InsightsCard insights={insights} />
 
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card className="flex flex-col gap-4 p-5">
