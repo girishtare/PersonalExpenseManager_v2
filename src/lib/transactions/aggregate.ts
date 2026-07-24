@@ -27,7 +27,7 @@ export function sumByType<C extends { txn_type: TxnType }>(
 
 export function aggregateByCategory<C extends { name: string; txn_type: TxnType }>(
   rows: { amount: number; txn_type_override: TxnType | null; categories: C[] | C | null }[],
-  type: 'income' | 'expense'
+  type: TxnType
 ): { name: string; amount: number }[] {
   const totals = new Map<string, number>();
   for (const row of rows) {

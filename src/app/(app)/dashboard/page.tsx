@@ -22,6 +22,7 @@ import { UpcomingDebitsCard } from './upcoming-debits-card';
 import { TopMerchantsTable } from './top-merchants-table';
 import { CategoryTrendChart } from './category-trend-chart';
 import { InsightsCard } from './insights-card';
+import { AdvisoryCard, type Advisory } from './advisory-card';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
@@ -225,6 +226,7 @@ export default async function DashboardPage({
     recurrenceRows,
     { data: merchantAliases },
     { data: earliestTxn },
+    { data: advisoryRow },
   ] = await Promise.all([
     supabase.from('accounts').select('id, display_name').eq('user_id', user.id).order('created_at', { ascending: true }),
     fetchAllRows(currentQuery),
@@ -239,8 +241,14 @@ export default async function DashboardPage({
     // Powers the Year dropdown's lower bound - only years that actually have data, rather than
     // an arbitrary fixed lookback.
     supabase.from('transactions').select('txn_date').eq('user_id', user.id).order('txn_date', { ascending: true }).limit(1).maybeSingle(),
+    // Written once a day by /api/insights/generate (Vercel Cron) - read-only here, never
+    // computed on the request path since it involves an LLM call.
+    supabase.from('financial_advisory').select('generated_at, investment_tips, spending_tips').eq('user_id', user.id).maybeSingle(),
   ]);
   const earliestYear = earliestTxn ? Number(earliestTxn.txn_date.slice(0, 4)) : today.getFullYear();
+  const advisory: Advisory | null = advisoryRow
+    ? { generatedAt: advisoryRow.generated_at, investmentTips: advisoryRow.investment_tips, spendingTips: advisoryRow.spending_tips }
+    : null;
 
   const merchantAliasByKey = new Map((merchantAliases ?? []).map((a) => [a.merchant_key, a.display_name]));
 
@@ -390,6 +398,8 @@ export default async function DashboardPage({
       </section>
 
       <InsightsCard insights={insights} />
+
+      <AdvisoryCard advisory={advisory} />
 
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card className="flex flex-col gap-4 p-5">
