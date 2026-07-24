@@ -291,7 +291,15 @@ export default async function DashboardPage({
     aliasName: merchantAliasByKey.get(d.descriptionKey) ?? null,
   }));
 
-  const categoryMonthlyTrend = computeCategoryMonthlyTrend(trendRowsTyped, monthBuckets);
+  const categoryMonthlyTrend = computeCategoryMonthlyTrend(trendRowsTyped, monthBuckets).map((cat) => ({
+    ...cat,
+    months: cat.months.map((m) => ({
+      ...m,
+      // Same alias lookup as Top merchants/Upcoming known debits, kept separate from
+      // `description` so the drill-down list can offer inline editing via MerchantNameCell.
+      transactions: m.transactions.map((t) => ({ ...t, aliasName: merchantAliasByKey.get(t.merchantKey) ?? null })),
+    })),
+  }));
 
   // "Merchants" means places you spend, not internal transfers/bill payments - a CC Bill
   // Payment would otherwise dominate this table as the single biggest "merchant".

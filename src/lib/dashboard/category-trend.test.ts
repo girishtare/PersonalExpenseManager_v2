@@ -13,15 +13,19 @@ function txn(
   categoryId: string,
   categoryName: string,
   txn_type: 'expense' | 'income' | 'transfer' | 'investment' = 'expense',
-  txn_type_override: 'expense' | 'income' | 'transfer' | 'investment' | null = null
+  txn_type_override: 'expense' | 'income' | 'transfer' | 'investment' | null = null,
+  description_raw = 'SOME MERCHANT'
 ): CategoryTrendTxn {
-  return { txn_date, amount, txn_type_override, category_id: categoryId, categories: { name: categoryName, txn_type } };
+  return { txn_date, amount, txn_type_override, category_id: categoryId, description_raw, categories: { name: categoryName, txn_type } };
 }
 
 describe('computeCategoryMonthlyTrend', () => {
   it('buckets one category across months, zero-filling months with no spend', () => {
     const result = computeCategoryMonthlyTrend(
-      [txn('2026-05-10', 500, 'cat-groceries', 'Groceries'), txn('2026-07-15', 700, 'cat-groceries', 'Groceries')],
+      [
+        txn('2026-05-10', 500, 'cat-groceries', 'Groceries', 'expense', null, 'STAR BAZAAR'),
+        txn('2026-07-15', 700, 'cat-groceries', 'Groceries', 'expense', null, 'BIG BASKET'),
+      ],
       BUCKETS
     );
     expect(result).toEqual([
@@ -29,12 +33,31 @@ describe('computeCategoryMonthlyTrend', () => {
         categoryId: 'cat-groceries',
         categoryName: 'Groceries',
         months: [
-          { month: 'May 2026', amount: 500 },
-          { month: 'Jun 2026', amount: 0 },
-          { month: 'Jul 2026', amount: 700 },
+          {
+            month: 'May 2026',
+            amount: 500,
+            transactions: [{ description: 'STAR BAZAAR', merchantKey: 'star bazaar', amount: 500, date: '2026-05-10' }],
+          },
+          { month: 'Jun 2026', amount: 0, transactions: [] },
+          {
+            month: 'Jul 2026',
+            amount: 700,
+            transactions: [{ description: 'BIG BASKET', merchantKey: 'big basket', amount: 700, date: '2026-07-15' }],
+          },
         ],
       },
     ]);
+  });
+
+  it('lists a month bucket its individual transactions, largest first', () => {
+    const result = computeCategoryMonthlyTrend(
+      [
+        txn('2026-06-01', 200, 'cat-dining', 'Dining', 'expense', null, 'SMALL SNACK'),
+        txn('2026-06-20', 900, 'cat-dining', 'Dining', 'expense', null, 'BIG DINNER'),
+      ],
+      BUCKETS
+    );
+    expect(result[0].months[1].transactions.map((t) => t.description)).toEqual(['BIG DINNER', 'SMALL SNACK']);
   });
 
   it('sums multiple transactions within the same month', () => {
