@@ -10,8 +10,9 @@ export const maxDuration = 60;
 
 /**
  * Daily cron job (see vercel.json) that regenerates the dashboard's financial advisory: pulls
- * the last 12 months of transactions, summarizes them, asks Claude for investment/spending
- * suggestions grounded in those real numbers, and upserts the single row the dashboard reads.
+ * the last 12 months of transactions, summarizes them, asks Gemini (Google AI Studio's free
+ * tier - see generateAdvisory) for investment/spending suggestions grounded in those real
+ * numbers, and upserts the single row the dashboard reads.
  * Vercel signs cron-triggered requests with `Authorization: Bearer $CRON_SECRET` when CRON_SECRET
  * is set as a project env var - same shared-secret pattern /api/gmail/sync uses for its own
  * server-to-server calls, just a different secret since this one is Vercel's own convention.

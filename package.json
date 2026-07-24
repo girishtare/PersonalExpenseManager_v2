@@ -10,8 +10,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.114.0",
     "@base-ui/react": "^1.6.0",
+    "@google/genai": "^2.13.0",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.110.0",
     "@thednp/dommatrix": "^3.0.4",
