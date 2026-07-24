@@ -1,9 +1,12 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import type { AdvisoryInputs } from './aggregate';
 
-// Flash tier - free (no credit card) under Google AI Studio's free tier as of writing, and more
-// than sufficient quality for one structured summary a day. See generateAdvisory for the key.
-const MODEL = 'gemini-2.5-flash';
+// "-latest" alias (not a pinned version) so this doesn't go stale as Google retires specific
+// model versions - gemini-2.5-flash itself already returned 404 "no longer available to new
+// users" during setup. Flash tier is free (no credit card) under Google AI Studio's free tier,
+// and more than sufficient quality for one structured summary a day. See generateAdvisory for
+// the key.
+const MODEL = 'gemini-flash-latest';
 const MAX_TIPS = 4;
 
 export interface AdvisoryResult {
